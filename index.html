@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>SketchCrew — Tebak Gambar Multiplayer</title>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <style>
+    /* ========================================================
+       CSS VARIABLES & RESET
+    ======================================================== */
+    :root {
+      --bg:        #0d0f14;
+      --surface:   #161922;
+      --surface2:  #1e2230;
+      --border:    #2a2f42;
+      --accent:    #6c63ff;
+      --accent2:   #ff6584;
+      --green:     #43e97b;
+      --gold:      #ffd166;
+      --text:      #e8eaf2;
+      --muted:     #6b7194;
+      --radius:    14px;
+      --radius-sm: 8px;
+      --shadow:    0 8px 40px rgba(0,0,0,.55);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ========================================================
+       SCREENS (shown/hidden via .active)
+    ======================================================== */
+    .screen { display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+    .screen.active { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+    /* ========================================================
+       LOBBY SCREEN
+    ======================================================== */
+    #lobby-screen {
+      background:
+        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(108,99,255,.18) 0%, transparent 70%),
+        var(--bg);
+      padding: 24px 16px;
+      gap: 0;
+    }
+    .lobby-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 36px 32px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+    .logo {
+      text-align: center;
+    }
+    .logo h1 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 2.2rem;
+      letter-spacing: -1px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .logo p {
+      color: var(--muted);
+      font-size: .85rem;
+      margin-top: 4px;
+    }
+    .divider {
+      height: 1px;
+      background: var(--border);
+    }
+    .form-group { display: flex; flex-direction: column; gap: 8px; }
+    .form-group label { font-size: .78rem; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: .95rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+    input[type="text"]:focus { border-color: var(--accent); }
+    input[type="text"]::placeholder { color: var(--muted); }
+    .btn {
+      padding: 13px 20px;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: .9rem;
+      letter-spacing: .02em;
+      transition: all .18s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: #5a52e0; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(108,99,255,.4); }
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--border); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+    .btn-group { display: flex; gap: 10px; }
+    .btn-group .btn { flex: 1; }
+    .error-msg { color: var(--accent2); font-size: .82rem; min-height: 18px; }
+
+    /* ========================================================
+       WAITING ROOM
+    ======================================================== */
+    #waiting-screen {
+      padding: 24px 16px;
+      background:
+        radial-gradient(ellipse 60% 50% at 80% 20%, rgba(255,101,132,.1) 0%, transparent 60%),
+        var(--bg);
+    }
+    .waiting-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 28px 26px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .room-header { display: flex; align-items: center; justify-content: space-between; }
+    .room-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.3rem; }
+    .room-code-badge {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 40px;
+      padding: 6px 14px;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: .9rem;
+      color: var(--gold);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background .2s;
+    }
+    .room-code-badge:hover { background: var(--border); }
+    .players-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 10px;
+    }
+    .player-card-mini {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .avatar {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: .85rem;
+      flex-shrink: 0;
+    }
+    .player-card-mini .pname {
+      font-size: .82rem;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .host-tag {
+      font-size: .6rem;
+      background: var(--gold);
+      color: var(--bg);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .waiting-status {
+      text-align: center;
+      color: var(--muted);
+      font-size: .85rem;
+    }
+
+    /* ========================================================
+       GAME SCREEN
+    ======================================================== */
+    #game-screen {
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    #game-screen.active { display: flex; }
+
+    /* Top bar */
+    .game-topbar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      gap: 10px;
+    }
+    .topbar-left, .topbar-right {
+      display: flex; align-items: center; gap: 10px;
+      flex: 1;
+    }
+    .topbar-right { justify-content: flex-end; }
+    .round-badge {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 40px;
+      padding: 4px 12px;
+      font-size: .75rem;
+      font-weight: 600;
+      color: var(--muted);
+      font-family: 'Syne', sans-serif;
+    }
+    .theme-badge {
+      background: rgba(108,99,255,.15);
+      border: 1px solid rgba(108,99,255,.3);
+      border-radius: 40px;
+      padding: 4px 12px;
+      font-size: .75rem;
+      font-weight: 600;
+      color: var(--accent);
+      font-family: 'Syne', sans-serif;
+    }
+    /* Timer */
+    .timer-ring-wrap {
+      position: relative;
+      width: 44px; height: 44px;
+      flex-shrink: 0;
+    }
+    #timer-svg { position: absolute; top: 0; left: 0; transform: rotate(-90deg); }
+    #timer-circle {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-dasharray: 120;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 1s linear, stroke .4s;
+    }
+    .timer-number {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: .95rem;
+    }
+
+    /* Main game area */
+    .game-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+    /* Canvas area */
+    .canvas-wrap {
+      flex: 1;
+      position: relative;
+      min-height: 0;
+      background: var(--surface2);
+      overflow: hidden;
+    }
+    #game-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+      touch-action: none;
+    }
+    /* Word hint overlay */
+    .word-hint-bar {
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      pointer-events: none;
+    }
+    .hint-letter {
+      width: 22px; height: 28px;
+      background: rgba(14,16,20,.7);
+      border-bottom: 2px solid var(--text);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--text);
+      border-radius: 3px;
+    }
+    .hint-letter.revealed { background: rgba(67,233,123,.1); border-bottom-color: var(--green); color: var(--green); }
+    /* Word reveal overlay (for drawer) */
+    .drawer-word-bar {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(14,16,20,.85);
+      border: 1px solid var(--accent);
+      border-radius: 40px;
+      padding: 5px 16px;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1rem;
+      color: var(--accent);
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    /* Phase overlay */
+    .phase-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(13,15,20,.88);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      z-index: 10;
+    }
+    .phase-overlay.hidden { display: none; }
+    .phase-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.8rem;
+      text-align: center;
+    }
+    .phase-sub { color: var(--muted); font-size: .9rem; text-align: center; max-width: 260px; }
+    .phase-word {
+      font-family: 'Syne', sans-serif;
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--gold);
+      letter-spacing: 2px;
+    }
+
+    /* Drawing toolbar */
+    .draw-toolbar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .draw-toolbar::-webkit-scrollbar { display: none; }
+    .color-swatch {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: transform .15s, border-color .15s;
+    }
+    .color-swatch:hover { transform: scale(1.15); }
+    .color-swatch.active { border-color: var(--text); transform: scale(1.15); }
+    .toolbar-sep {
+      width: 1px; height: 28px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+    .tool-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      font-size: 1rem;
+      transition: background .15s, border-color .15s;
+    }
+    .tool-btn:hover { background: var(--border); }
+    .tool-btn.active { background: rgba(108,99,255,.2); border-color: var(--accent); }
+    .size-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      width: 80px;
+      flex-shrink: 0;
+      outline: none;
+    }
+    .size-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+    }
+    .size-slider::-moz-range-thumb {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: none;
+    }
+
+    /* Bottom section: players + chat */
+    .bottom-section {
+      flex-shrink: 0;
+      display: flex;
+      height: 30vh;
+      min-height: 160px;
+      max-height: 280px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      overflow: hidden;
+    }
+    /* Scoreboard */
+    .scoreboard {
+      width: 130px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .section-title {
+      padding: 8px 12px;
+      font-size: .7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .player-list {
+      flex: 1;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    .player-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-bottom: 1px solid rgba(42,47,66,.5);
+      transition: background .15s;
+    }
+    .player-row:hover { background: var(--surface2); }
+    .player-row .avatar { width: 26px; height: 26px; font-size: .7rem; flex-shrink: 0; }
+    .player-row .pinfo { flex: 1; min-width: 0; }
+    .player-row .pname { font-size: .78rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .player-row .pscore { font-family: 'Syne', sans-serif; font-weight: 700; font-size: .8rem; color: var(--gold); flex-shrink: 0; }
+    .drawer-indicator {
+      width: 6px; height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    /* Chat */
+    .chat-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    .chat-msg {
+      font-size: .8rem;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    .chat-msg .cn {
+      font-weight: 600;
+      margin-right: 4px;
+    }
+    .chat-msg.correct {
+      background: rgba(67,233,123,.08);
+      border-left: 2px solid var(--green);
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: var(--green);
+    }
+    .chat-msg.system {
+      color: var(--muted);
+      font-style: italic;
+      font-size: .75rem;
+    }
+    .chat-msg.cooldown { color: var(--accent2); font-style: italic; font-size: .75rem; }
+    .chat-input-row {
+      display: flex;
+      gap: 8px;
+      padding: 8px 10px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .chat-input-row input {
+      flex: 1;
+      padding: 8px 12px;
+      font-size: .82rem;
+      border-radius: 20px;
+    }
+    .chat-input-row .btn {
+      padding: 8px 14px;
+      font-size: .8rem;
+      border-radius: 20px;
+    }
+
+    /* Round end overlay scores */
+    .round-scores {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+      max-width: 280px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .rs-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--surface2);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+    }
+    .rs-pos {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.1rem;
+      width: 24px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .rs-pos.gold { color: var(--gold); }
+    .rs-name { flex: 1; font-size: .88rem; font-weight: 500; }
+    .rs-pts { font-family: 'Syne', sans-serif; font-weight: 700; font-size: .9rem; color: var(--gold); }
+
+    /* Copied toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(60px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 40px;
+      padding: 10px 20px;
+      font-size: .85rem;
+      font-weight: 500;
+      color: var(--text);
+      box-shadow: var(--shadow);
+      transition: transform .3s ease;
+      z-index: 999;
+      white-space: nowrap;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* Loading state */
+    #loading-screen {
+      background: var(--bg);
+      color: var(--muted);
+      font-size: .9rem;
+      gap: 12px;
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Pulse animation for CORRECT guess */
+    @keyframes correct-flash {
+      0% { box-shadow: 0 0 0 0 rgba(67,233,123,.5); }
+      70% { box-shadow: 0 0 0 14px rgba(67,233,123,0); }
+      100% { box-shadow: 0 0 0 0 rgba(67,233,123,0); }
+    }
+    .canvas-wrap.flash { animation: correct-flash .6s ease; }
+
+    @media (min-width: 600px) {
+      .scoreboard { width: 160px; }
+      .bottom-section { height: 28vh; }
+    }
+
+    /* Hint reveal */
+    @keyframes hint-reveal { from { transform: translateY(4px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .hint-letter.revealed { animation: hint-reveal .2s ease both; }
+  </style>
+</head>
+<body>
+
+<!-- ========================================================
+     LOADING
+======================================================== -->
+<div id="loading-screen" class="screen active">
+  <div class="spinner"></div>
+  <span>Menghubungkan…</span>
+</div>
+
+<!-- ========================================================
+     LOBBY
+======================================================== -->
+<div id="lobby-screen" class="screen">
+  <div class="lobby-card">
+    <div class="logo">
+      <h1>✏️ SketchCrew</h1>
+      <p>Multiplayer tebak gambar realtime</p>
+    </div>
+    <div class="divider"></div>
+    <div class="form-group">
+      <label>Nama pemain</label>
+      <input id="player-name" type="text" placeholder="Masukkan nama kamu…" maxlength="16" autocomplete="off" />
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-primary" id="btn-create">Buat Room</button>
+    </div>
+    <div class="divider"></div>
+    <div class="form-group">
+      <label>Kode room</label>
+      <input id="room-code-input" type="text" placeholder="Masukkan kode room…" maxlength="6" autocomplete="off"
+             style="text-transform:uppercase;letter-spacing:.15em;" />
+    </div>
+    <button class="btn btn-secondary" id="btn-join">Gabung Room</button>
+    <div id="lobby-error" class="error-msg"></div>
+  </div>
+</div>
+
+<!-- ========================================================
+     WAITING ROOM
+======================================================== -->
+<div id="waiting-screen" class="screen">
+  <div class="waiting-card">
+    <div class="room-header">
+      <span class="room-title">Ruang Tunggu</span>
+      <span class="room-code-badge" id="copy-code-btn" title="Klik untuk salin">
+        🔑 <span id="display-room-code">XXXXXX</span>
+      </span>
+    </div>
+    <div class="players-grid" id="waiting-players"></div>
+    <div class="waiting-status" id="waiting-status">Menunggu pemain lain…</div>
+    <button class="btn btn-primary" id="btn-start" disabled>Mulai Game</button>
+  </div>
+</div>
+
+<!-- ========================================================
+     GAME SCREEN
+======================================================== -->
+<div id="game-screen" class="screen">
+
+  <!-- Top bar -->
+  <div class="game-topbar">
+    <div class="topbar-left">
+      <span class="round-badge" id="round-label">Ronde 1</span>
+      <span class="theme-badge" id="category-label">—</span>
+    </div>
+    <div class="timer-ring-wrap" id="timer-wrap">
+      <svg id="timer-svg" width="44" height="44">
+        <circle id="timer-circle" cx="22" cy="22" r="19"/>
+      </svg>
+      <span class="timer-number" id="timer-number">60</span>
+    </div>
+    <div class="topbar-right">
+      <span style="font-size:.78rem;color:var(--muted);" id="topbar-drawer-label">–</span>
+    </div>
+  </div>
+
+  <!-- Canvas area -->
+  <div class="game-main">
+    <div class="canvas-wrap" id="canvas-wrap">
+      <canvas id="game-canvas"></canvas>
+      <div class="drawer-word-bar" id="drawer-word-bar" style="display:none;"></div>
+      <div class="word-hint-bar" id="word-hint-bar"></div>
+      <div class="phase-overlay" id="phase-overlay">
+        <div class="phase-title" id="phase-title">Bersiap…</div>
+        <div class="phase-sub" id="phase-sub"></div>
+        <div class="phase-word" id="phase-word" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Drawing toolbar -->
+    <div class="draw-toolbar" id="draw-toolbar">
+      <div class="color-swatch active" data-color="#ffffff" style="background:#ffffff;" title="Putih"></div>
+      <div class="color-swatch" data-color="#f94144" style="background:#f94144;"></div>
+      <div class="color-swatch" data-color="#f8961e" style="background:#f8961e;"></div>
+      <div class="color-swatch" data-color="#ffd166" style="background:#ffd166;"></div>
+      <div class="color-swatch" data-color="#43e97b" style="background:#43e97b;"></div>
+      <div class="color-swatch" data-color="#4cc9f0" style="background:#4cc9f0;"></div>
+      <div class="color-swatch" data-color="#6c63ff" style="background:#6c63ff;"></div>
+      <div class="color-swatch" data-color="#ff6584" style="background:#ff6584;"></div>
+      <div class="color-swatch" data-color="#0d0f14" style="background:#0d0f14;border:1px solid #2a2f42;"></div>
+      <div class="toolbar-sep"></div>
+      <div class="tool-btn" id="eraser-btn" title="Penghapus">🧹</div>
+      <input type="range" class="size-slider" id="size-slider" min="2" max="32" value="4" />
+      <div class="toolbar-sep"></div>
+      <div class="tool-btn" id="clear-btn" title="Bersihkan canvas">🗑️</div>
+    </div>
+
+    <!-- Bottom: scoreboard + chat -->
+    <div class="bottom-section">
+      <div class="scoreboard">
+        <div class="section-title">Pemain</div>
+        <div class="player-list" id="game-player-list"></div>
+      </div>
+      <div class="chat-panel">
+        <div class="section-title">Chat & Tebakan</div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-row">
+          <input type="text" id="chat-input" placeholder="Tebak atau ngobrol…" maxlength="60" autocomplete="off" />
+          <button class="btn btn-primary" id="btn-send-chat">Kirim</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">Kode disalin!</div>
+
+<!-- ========================================================
+     JAVASCRIPT
+======================================================== -->
+<script>
+/*
+ * ============================================================
+ * FIREBASE CONFIG — ganti dengan config proyek Anda sendiri
+ * https://console.firebase.google.com/ → Project Settings → SDK
+ * ============================================================
+ * DATABASE STRUCTURE:
+ *
+ * rooms/
+ *   {roomId}/
+ *     host: "playerId"
+ *     status: "waiting" | "drawing" | "round_end"
+ *     currentRound: 1
+ *     maxRounds: 5
+ *     currentDrawer: "playerId"
+ *     currentWord: "kata"         <-- only drawer reads this
+ *     currentCategory: "Hewan"
+ *     roundStartTime: {serverTimestamp}
+ *     correctGuessers: {}         <-- map of playerId→true who guessed correctly
+ *     players/
+ *       {playerId}/
+ *         name: "string"
+ *         score: 0
+ *         online: true
+ *     chat/
+ *       {pushId}/
+ *         playerId: "id"
+ *         playerName: "string"
+ *         message: "string"
+ *         timestamp: serverTimestamp
+ *         isCorrect: false
+ *         isSystem: false
+ *     strokes/
+ *       {pushId}/
+ *         x: 0.0        <-- normalized 0–1
+ *         y: 0.0        <-- normalized 0–1
+ *         state: "start"|"move"|"end"
+ *         color: "#fff"
+ *         size: 4
+ *         ts: number
+ */
+
+const firebaseConfig = {
+    apiKey: "AIzaSyAA5zPOoPgLkm4tHLYSZzk-OgkILxoeKwU",
+    authDomain: "drawingpickgame.firebaseapp.com",
+    databaseURL: "https://drawingpickgame-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "drawingpickgame",
+    storageBucket: "drawingpickgame.firebasestorage.app",
+    messagingSenderId: "1002361006200",
+    appId: "1:1002361006200:web:e36aaf45bc0cfb6a32e58d",
+    measurementId: "G-FYDN77LRBD"
+  };
+
+// ============================================================
+// WORD LISTS
+// ============================================================
+const WORD_LISTS = {
+  "Hewan": [
+    "kucing","anjing","gajah","harimau","singa","burung","ikan","kuda","sapi","kerbau",
+    "kelinci","monyet","beruang","rubah","pinguin","katak","ular","buaya","jerapah","zebra",
+    "kanguru","koala","lumba-lumba","paus","hiu","elang","beo","merpati","cacing","laba-laba"
+  ],
+  "Makanan": [
+    "nasi","mie","sate","bakso","rendang","tempe","tahu","pizza","burger","roti",
+    "kue","coklat","es krim","sushi","nasi goreng","ayam goreng","gulai","soto","opor","lontong",
+    "ketoprak","gado-gado","siomay","pecel","rujak","mangga","pisang","apel","jeruk","strawberry"
+  ],
+  "Benda": [
+    "kursi","meja","lampu","pintu","jendela","buku","pensil","bolpoin","tas","sepatu",
+    "jam","kaca","gelas","piring","sendok","garpu","komputer","hp","televisi","radio",
+    "kipas","kulkas","oven","ember","payung","kunci","dompet","topi","kacamata","cermin"
+  ],
+  "Profesi": [
+    "dokter","guru","polisi","pilot","koki","petani","nelayan","arsitek","programmer","designer",
+    "pelukis","musisi","atlet","penyanyi","aktor","penulis","fotografer","astronot","insinyur","bidan",
+    "perawat","hakim","pengacara","tentara","pemadam kebakaran","tukang bangunan","sopir","kasir","pelayan","satpam"
+  ],
+  "Tempat": [
+    "sekolah","rumah sakit","pasar","mall","pantai","gunung","hutan","kota","desa","bandara",
+    "pelabuhan","stasiun","masjid","gereja","candi","museum","perpustakaan","taman","kolam renang","bioskop",
+    "restoran","hotel","kantor","pabrik","kebun binatang","stadion","lapangan","universitas","puskesmas","terminal"
+  ]
+};
+
+const CATEGORIES = Object.keys(WORD_LISTS);
+const ROUND_DURATION = 60; // seconds
+const MAX_ROUNDS = 5;
+const CHAT_COOLDOWN_MS = 1200;
+
+// ============================================================
+// HELPERS
+// ============================================================
+function genId() {
+  return Math.random().toString(36).slice(2,10).toUpperCase();
+}
+function genPlayerId() {
+  return 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+}
+function pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+function getAvatarColor(name) {
+  const colors = ['#f94144','#f8961e','#6c63ff','#4cc9f0','#43e97b','#ff6584','#ffd166','#90e0ef'];
+  let h = 0;
+  for (let c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  return colors[h % colors.length];
+}
+function initials(name) {
+  return name.slice(0,2).toUpperCase();
+}
+
+// ============================================================
+// STATE
+// ============================================================
+let db;
+let roomId = null;
+let playerId = null;
+let playerName = null;
+let isHost = false;
+let isDrawer = false;
+
+let gameState = {};      // local snapshot of room
+let playersState = {};   // local snapshot of players
+let currentWord = '';
+let currentCategory = '';
+
+// Canvas
+let ctx;
+let canvas;
+let painting = false;
+let currentColor = '#ffffff';
+let brushSize = 4;
+let isEraser = false;
+let strokesRef = null;
+let lastSentStroke = null;
+
+// Chat cooldown
+let lastChatTime = 0;
+
+// Timer
+let timerInterval = null;
+let roundEndTime = null;
+
+// Listeners cleanup
+const activeListeners = [];
+function addListener(ref, event, fn) {
+  ref.on(event, fn);
+  activeListeners.push({ ref, event, fn });
+}
+function removeAllListeners() {
+  activeListeners.forEach(({ ref, event, fn }) => ref.off(event, fn));
+  activeListeners.length = 0;
+}
+
+// ============================================================
+// FIREBASE INIT
+// ============================================================
+function initFirebase() {
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    showScreen('lobby-screen');
+  } catch(e) {
+    console.error('Firebase init error:', e);
+    showScreen('lobby-screen');
+    // Still show lobby even if firebase fails (for UI testing)
+    db = null;
+  }
+}
+
+// ============================================================
+// UI UTILITIES
+// ============================================================
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function showError(msg) {
+  document.getElementById('lobby-error').textContent = msg;
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ============================================================
+// LOBBY ACTIONS
+// ============================================================
+document.getElementById('btn-create').addEventListener('click', () => {
+  const name = document.getElementById('player-name').value.trim();
+  if (!name) return showError('Masukkan nama kamu dulu!');
+  playerName = name;
+  playerId = genPlayerId();
+  createRoom();
+});
+document.getElementById('btn-join').addEventListener('click', () => {
+  const name = document.getElementById('player-name').value.trim();
+  const code = document.getElementById('room-code-input').value.trim().toUpperCase();
+  if (!name) return showError('Masukkan nama kamu dulu!');
+  if (!code || code.length !== 6) return showError('Kode room harus 6 karakter!');
+  playerName = name;
+  playerId = genPlayerId();
+  joinRoom(code);
+});
+document.getElementById('player-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btn-create').click();
+});
+document.getElementById('room-code-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btn-join').click();
+});
+document.getElementById('room-code-input').addEventListener('input', function() {
+  this.value = this.value.toUpperCase();
+});
+
+// ============================================================
+// ROOM CREATION & JOINING
+// ============================================================
+async function createRoom() {
+  if (!db) return showError('Firebase tidak terhubung. Cek config!');
+  roomId = genId();
+  isHost = true;
+  const roomRef = db.ref(`rooms/${roomId}`);
+  await roomRef.set({
+    host: playerId,
+    status: 'waiting',
+    currentRound: 0,
+    maxRounds: MAX_ROUNDS,
+    currentDrawer: null,
+    currentWord: null,
+    currentCategory: null,
+    roundStartTime: null,
+    correctGuessers: null
+  });
+  await db.ref(`rooms/${roomId}/players/${playerId}`).set({
+    name: playerName,
+    score: 0,
+    online: true
+  });
+  setupPresence();
+  enterWaitingRoom();
+}
+
+async function joinRoom(code) {
+  if (!db) return showError('Firebase tidak terhubung. Cek config!');
+  const snapshot = await db.ref(`rooms/${code}`).once('value');
+  if (!snapshot.exists()) return showError('Room tidak ditemukan!');
+  const data = snapshot.val();
+  if (data.status !== 'waiting') return showError('Game sudah berlangsung, coba room lain!');
+  roomId = code;
+  isHost = false;
+  await db.ref(`rooms/${roomId}/players/${playerId}`).set({
+    name: playerName,
+    score: 0,
+    online: true
+  });
+  setupPresence();
+  enterWaitingRoom();
+}
+
+function setupPresence() {
+  const presRef = db.ref(`rooms/${roomId}/players/${playerId}/online`);
+  presRef.onDisconnect().set(false);
+}
+
+// ============================================================
+// WAITING ROOM
+// ============================================================
+function enterWaitingRoom() {
+  document.getElementById('display-room-code').textContent = roomId;
+  showScreen('waiting-screen');
+  listenWaitingRoom();
+}
+
+function listenWaitingRoom() {
+  const playersRef = db.ref(`rooms/${roomId}/players`);
+  addListener(playersRef, 'value', snap => {
+    playersState = snap.val() || {};
+    renderWaitingPlayers();
+    updateStartButton();
+  });
+  const roomRef = db.ref(`rooms/${roomId}/status`);
+  addListener(roomRef, 'value', snap => {
+    if (snap.val() === 'drawing') {
+      enterGameScreen();
+    }
+  });
+  // Also check if host
+  const hostRef = db.ref(`rooms/${roomId}/host`);
+  addListener(hostRef, 'value', snap => {
+    isHost = snap.val() === playerId;
+    updateStartButton();
+  });
+}
+
+function renderWaitingPlayers() {
+  const grid = document.getElementById('waiting-players');
+  grid.innerHTML = '';
+  const roomHostId = Object.keys(playersState).length ? null : playerId;
+  db.ref(`rooms/${roomId}/host`).once('value', snap => {
+    const hostId = snap.val();
+    Object.entries(playersState).forEach(([pid, p]) => {
+      if (!p || !p.online) return;
+      const div = document.createElement('div');
+      div.className = 'player-card-mini';
+      const col = getAvatarColor(p.name || '?');
+      div.innerHTML = `
+        <div class="avatar" style="background:${col}20;color:${col};">${initials(p.name||'?')}</div>
+        <div>
+          <div class="pname">${escHtml(p.name)}</div>
+          ${pid === hostId ? '<div class="host-tag">Host</div>' : ''}
+        </div>`;
+      grid.appendChild(div);
+    });
+  });
+}
+
+function updateStartButton() {
+  const btn = document.getElementById('btn-start');
+  const onlinePlayers = Object.values(playersState).filter(p => p && p.online).length;
+  btn.disabled = !isHost || onlinePlayers < 2;
+  document.getElementById('waiting-status').textContent =
+    isHost
+      ? (onlinePlayers < 2 ? `Butuh minimal 2 pemain (${onlinePlayers} terhubung)` : `${onlinePlayers} pemain siap — klik Mulai!`)
+      : `${onlinePlayers} pemain terhubung… menunggu host`;
+}
+
+document.getElementById('btn-start').addEventListener('click', () => {
+  if (!isHost) return;
+  startGame();
+});
+
+document.getElementById('copy-code-btn').addEventListener('click', () => {
+  navigator.clipboard?.writeText(roomId).catch(() => {});
+  showToast(`Kode "${roomId}" disalin!`);
+});
+
+// ============================================================
+// GAME START & FLOW
+// ============================================================
+async function startGame() {
+  const players = Object.entries(playersState)
+    .filter(([,p]) => p && p.online)
+    .map(([id]) => id);
+  const drawerIndex = 0;
+  const drawerId = players[drawerIndex];
+  const cat = pickRandom(CATEGORIES);
+  const word = pickRandom(WORD_LISTS[cat]);
+
+  await db.ref(`rooms/${roomId}`).update({
+    status: 'drawing',
+    currentRound: 1,
+    currentDrawer: drawerId,
+    currentWord: word,
+    currentCategory: cat,
+    roundStartTime: firebase.database.ServerValue.TIMESTAMP,
+    correctGuessers: null,
+    drawerOrder: players,
+    drawerIndex: 0
+  });
+  // Clear previous strokes
+  await db.ref(`rooms/${roomId}/strokes`).remove();
+}
+
+async function nextRound(roomSnap) {
+  const drawerOrder = roomSnap.drawerOrder || Object.keys(playersState);
+  const nextIndex = ((roomSnap.drawerIndex || 0) + 1) % drawerOrder.length;
+  const nextRound = (roomSnap.currentRound || 1) + 1;
+
+  if (nextRound > MAX_ROUNDS) {
+    // Game over
+    await db.ref(`rooms/${roomId}`).update({ status: 'gameover' });
+    return;
+  }
+
+  const cat = pickRandom(CATEGORIES);
+  const word = pickRandom(WORD_LISTS[cat]);
+  const drawerId = drawerOrder[nextIndex];
+
+  await db.ref(`rooms/${roomId}`).update({
+    status: 'drawing',
+    currentRound: nextRound,
+    currentDrawer: drawerId,
+    currentWord: word,
+    currentCategory: cat,
+    roundStartTime: firebase.database.ServerValue.TIMESTAMP,
+    correctGuessers: null,
+    drawerIndex: nextIndex
+  });
+  await db.ref(`rooms/${roomId}/strokes`).remove();
+}
+
+// ============================================================
+// GAME SCREEN
+// ============================================================
+function enterGameScreen() {
+  removeAllListeners();
+  showScreen('game-screen');
+  initCanvas();
+  setupGameListeners();
+}
+
+function setupGameListeners() {
+  // Listen to full room state
+  addListener(db.ref(`rooms/${roomId}`), 'value', snap => {
+    const data = snap.val();
+    if (!data) return;
+    gameState = data;
+    playersState = data.players || {};
+    isDrawer = data.currentDrawer === playerId;
+    currentWord = data.currentWord || '';
+    currentCategory = data.currentCategory || '';
+
+    renderGameUI(data);
+
+    if (data.status === 'drawing') {
+      startRoundTimer(data.roundStartTime);
+    } else if (data.status === 'round_end') {
+      stopTimer();
+      showRoundEnd(data);
+    } else if (data.status === 'gameover') {
+      stopTimer();
+      showGameOver(data);
+    }
+  });
+
+  // Listen to strokes
+  strokesRef = db.ref(`rooms/${roomId}/strokes`);
+  addListener(strokesRef, 'child_added', snap => {
+    const s = snap.val();
+    if (s) drawRemoteStroke(s);
+  });
+
+  // Listen to chat
+  addListener(db.ref(`rooms/${roomId}/chat`), 'child_added', snap => {
+    const msg = snap.val();
+    if (msg) appendChatMessage(msg);
+  });
+}
+
+// ============================================================
+// GAME UI RENDER
+// ============================================================
+function renderGameUI(data) {
+  document.getElementById('round-label').textContent = `Ronde ${data.currentRound || 1}/${MAX_ROUNDS}`;
+  document.getElementById('category-label').textContent = data.currentCategory || '—';
+
+  const drawer = playersState[data.currentDrawer];
+  const drawerName = drawer ? drawer.name : '?';
+  document.getElementById('topbar-drawer-label').textContent =
+    isDrawer ? '🖌️ Kamu menggambar!' : `🖌️ ${escHtml(drawerName)} menggambar`;
+
+  // Drawer bar
+  const wordBar = document.getElementById('drawer-word-bar');
+  if (isDrawer && data.currentWord) {
+    wordBar.style.display = 'block';
+    wordBar.textContent = `🤫 ${data.currentWord}`;
+  } else {
+    wordBar.style.display = 'none';
+  }
+
+  // Word hint
+  if (!isDrawer && data.currentWord) {
+    renderWordHint(data.currentWord, data.correctGuessers || {});
+  } else {
+    document.getElementById('word-hint-bar').innerHTML = '';
+  }
+
+  // Drawing tools enabled only for drawer
+  const toolbar = document.getElementById('draw-toolbar');
+  toolbar.style.opacity = isDrawer ? '1' : '0.35';
+  toolbar.style.pointerEvents = isDrawer ? 'auto' : 'none';
+  canvas.style.cursor = isDrawer ? 'crosshair' : 'default';
+
+  // Player list / scoreboard
+  renderScoreboard(data);
+
+  // Phase overlay
+  const overlay = document.getElementById('phase-overlay');
+  if (data.status === 'drawing') {
+    overlay.classList.add('hidden');
+  }
+}
+
+function renderWordHint(word, correctGuessers) {
+  const bar = document.getElementById('word-hint-bar');
+  const didGuess = correctGuessers[playerId];
+  bar.innerHTML = '';
+  for (let i = 0; i < word.length; i++) {
+    const span = document.createElement('span');
+    span.className = 'hint-letter' + (didGuess ? ' revealed' : '');
+    span.textContent = didGuess ? word[i] : (word[i] === ' ' ? ' ' : '_');
+    if (word[i] === ' ') span.style.width = '12px';
+    bar.appendChild(span);
+  }
+}
+
+function renderScoreboard(data) {
+  const list = document.getElementById('game-player-list');
+  list.innerHTML = '';
+  const sorted = Object.entries(playersState)
+    .filter(([,p]) => p)
+    .sort((a,b) => (b[1].score||0) - (a[1].score||0));
+  sorted.forEach(([pid, p]) => {
+    const div = document.createElement('div');
+    div.className = 'player-row';
+    const col = getAvatarColor(p.name || '?');
+    const isCurrentDrawer = pid === data.currentDrawer;
+    div.innerHTML = `
+      ${isCurrentDrawer ? '<div class="drawer-indicator"></div>' : ''}
+      <div class="avatar" style="background:${col}20;color:${col};">${initials(p.name||'?')}</div>
+      <div class="pinfo"><div class="pname">${escHtml(p.name)}</div></div>
+      <div class="pscore">${p.score||0}</div>`;
+    list.appendChild(div);
+  });
+}
+
+// ============================================================
+// ROUND END / GAME OVER
+// ============================================================
+function showRoundEnd(data) {
+  const overlay = document.getElementById('phase-overlay');
+  overlay.classList.remove('hidden');
+  document.getElementById('phase-title').textContent = '⏱️ Ronde Selesai!';
+  document.getElementById('phase-sub').textContent = `Kata yang benar: `;
+  const pw = document.getElementById('phase-word');
+  pw.textContent = data.currentWord || '';
+  pw.style.display = 'block';
+
+  if (isHost) {
+    setTimeout(() => {
+      db.ref(`rooms/${roomId}`).once('value', snap => {
+        const d = snap.val();
+        if (d && d.status === 'round_end') nextRound(d);
+      });
+    }, 4000);
+  }
+}
+
+function showGameOver(data) {
+  const overlay = document.getElementById('phase-overlay');
+  overlay.classList.remove('hidden');
+  document.getElementById('phase-title').textContent = '🏆 Game Selesai!';
+  document.getElementById('phase-word').style.display = 'none';
+
+  const sorted = Object.entries(playersState)
+    .filter(([,p]) => p)
+    .sort((a,b) => (b[1].score||0) - (a[1].score||0));
+  const sub = document.getElementById('phase-sub');
+  sub.innerHTML = sorted.slice(0,3).map((([,p],i) =>
+    `${['🥇','🥈','🥉'][i]||'  '} ${escHtml(p.name)}: ${p.score||0} poin`
+  )).join('<br>');
+}
+
+// ============================================================
+// TIMER
+// ============================================================
+function startRoundTimer(startTime) {
+  stopTimer();
+  const circle = document.getElementById('timer-circle');
+  const numEl = document.getElementById('timer-number');
+  const circ = 120; // dasharray
+
+  function tick() {
+    if (!startTime) return;
+    const now = Date.now();
+    const elapsed = Math.floor((now - startTime) / 1000);
+    const remaining = Math.max(0, ROUND_DURATION - elapsed);
+    numEl.textContent = remaining;
+    const pct = remaining / ROUND_DURATION;
+    circle.style.strokeDashoffset = circ - pct * circ;
+    circle.style.stroke = pct > 0.4 ? 'var(--accent)' : pct > 0.2 ? 'var(--gold)' : 'var(--accent2)';
+
+    if (remaining <= 0) {
+      stopTimer();
+      if (isHost) {
+        db.ref(`rooms/${roomId}`).once('value', snap => {
+          const d = snap.val();
+          if (d && d.status === 'drawing') {
+            db.ref(`rooms/${roomId}/status`).set('round_end');
+          }
+        });
+      }
+    }
+  }
+  timerInterval = setInterval(tick, 500);
+  tick();
+}
+
+function stopTimer() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+}
+
+// ============================================================
+// CANVAS & DRAWING
+// ============================================================
+function initCanvas() {
+  canvas = document.getElementById('game-canvas');
+  ctx = canvas.getContext('2d');
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  // Mouse
+  canvas.addEventListener('mousedown', e => startDraw(e));
+  canvas.addEventListener('mousemove', e => moveDraw(e));
+  canvas.addEventListener('mouseup', () => endDraw());
+  canvas.addEventListener('mouseleave', () => endDraw());
+
+  // Touch
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); startDraw(e.touches[0]); }, { passive: false });
+  canvas.addEventListener('touchmove', e => { e.preventDefault(); moveDraw(e.touches[0]); }, { passive: false });
+  canvas.addEventListener('touchend', () => endDraw());
+
+  // Color swatches
+  document.querySelectorAll('.color-swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+      sw.classList.add('active');
+      currentColor = sw.dataset.color;
+      isEraser = false;
+      document.getElementById('eraser-btn').classList.remove('active');
+    });
+  });
+
+  document.getElementById('eraser-btn').addEventListener('click', () => {
+    isEraser = !isEraser;
+    document.getElementById('eraser-btn').classList.toggle('active', isEraser);
+  });
+
+  document.getElementById('size-slider').addEventListener('input', e => {
+    brushSize = parseInt(e.target.value);
+  });
+
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    if (!isDrawer) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    db.ref(`rooms/${roomId}/strokes`).remove();
+  });
+}
+
+function resizeCanvas() {
+  if (!canvas) return;
+  const wrap = document.getElementById('canvas-wrap');
+  const rect = wrap.getBoundingClientRect();
+  // Save current drawing
+  const imgData = ctx ? ctx.getImageData(0, 0, canvas.width, canvas.height) : null;
+  const oldW = canvas.width, oldH = canvas.height;
+  canvas.width = Math.floor(rect.width);
+  canvas.height = Math.floor(rect.height);
+  if (imgData && ctx && oldW > 0 && oldH > 0) {
+    ctx.putImageData(imgData, 0, 0);
+  }
+  // Dark background
+  if (ctx) {
+    ctx.fillStyle = '#1a1d26';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+}
+
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) / canvas.width,
+    y: (e.clientY - rect.top) / canvas.height
+  };
+}
+
+function startDraw(e) {
+  if (!isDrawer) return;
+  painting = true;
+  const pos = getPos(e);
+  sendStroke(pos.x, pos.y, 'start');
+  ctx.beginPath();
+  ctx.moveTo(pos.x * canvas.width, pos.y * canvas.height);
+}
+
+function moveDraw(e) {
+  if (!isDrawer || !painting) return;
+  const pos = getPos(e);
+  sendStroke(pos.x, pos.y, 'move');
+  applyLocalStroke(pos.x, pos.y, 'move');
+}
+
+function endDraw() {
+  if (!painting) return;
+  painting = false;
+  sendStroke(0, 0, 'end');
+}
+
+function sendStroke(x, y, state) {
+  if (!strokesRef) return;
+  const stroke = {
+    x, y, state,
+    color: isEraser ? null : currentColor,
+    size: brushSize,
+    eraser: isEraser,
+    ts: Date.now()
+  };
+  strokesRef.push(stroke);
+}
+
+function drawRemoteStroke(s) {
+  const px = s.x * canvas.width;
+  const py = s.y * canvas.height;
+
+  if (s.state === 'start') {
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.strokeStyle = s.eraser ? '#1a1d26' : s.color;
+    ctx.lineWidth = s.size;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  } else if (s.state === 'move') {
+    ctx.strokeStyle = s.eraser ? '#1a1d26' : s.color;
+    ctx.lineWidth = s.size;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineTo(px, py);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+  }
+  // 'end' just stops
+}
+
+function applyLocalStroke(x, y, state) {
+  const px = x * canvas.width;
+  const py = y * canvas.height;
+  ctx.strokeStyle = isEraser ? '#1a1d26' : currentColor;
+  ctx.lineWidth = brushSize;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.lineTo(px, py);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+}
+
+// ============================================================
+// CHAT
+// ============================================================
+document.getElementById('btn-send-chat').addEventListener('click', sendChat);
+document.getElementById('chat-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendChat();
+});
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  const now = Date.now();
+  if (now - lastChatTime < CHAT_COOLDOWN_MS) {
+    appendLocalSystem('⏳ Tunggu sebentar sebelum kirim pesan lagi.');
+    return;
+  }
+  lastChatTime = now;
+  input.value = '';
+
+  if (gameState.status !== 'drawing') return;
+  if (isDrawer) {
+    // Drawer can only send non-guess chat
+    await db.ref(`rooms/${roomId}/chat`).push({
+      playerId,
+      playerName,
+      message: msg,
+      timestamp: firebase.database.ServerValue.TIMESTAMP,
+      isCorrect: false,
+      isSystem: false
+    });
+    return;
+  }
+
+  // Check if already guessed
+  if (gameState.correctGuessers && gameState.correctGuessers[playerId]) {
+    appendLocalSystem('✅ Kamu sudah menebak dengan benar!');
+    return;
+  }
+
+  const isCorrect = msg.toLowerCase().trim() === currentWord.toLowerCase().trim();
+
+  await db.ref(`rooms/${roomId}/chat`).push({
+    playerId,
+    playerName,
+    message: isCorrect ? '✅ Menebak dengan benar!' : msg,
+    timestamp: firebase.database.ServerValue.TIMESTAMP,
+    isCorrect,
+    isSystem: false
+  });
+
+  if (isCorrect) {
+    // Update scores & mark guesser
+    await db.ref(`rooms/${roomId}/correctGuessers/${playerId}`).set(true);
+    await db.ref(`rooms/${roomId}/players/${playerId}/score`).transaction(s => (s||0) + 10);
+    await db.ref(`rooms/${roomId}/players/${gameState.currentDrawer}/score`).transaction(s => (s||0) + 5);
+
+    // Flash canvas
+    document.getElementById('canvas-wrap').classList.add('flash');
+    setTimeout(() => document.getElementById('canvas-wrap').classList.remove('flash'), 700);
+
+    // Check if all non-drawers guessed
+    const onlinePlayers = Object.entries(playersState).filter(([pid,p]) => p && p.online && pid !== gameState.currentDrawer);
+    const newCorrect = Object.keys({ ...(gameState.correctGuessers||{}), [playerId]: true });
+    if (isHost && newCorrect.length >= onlinePlayers.length) {
+      await db.ref(`rooms/${roomId}/status`).set('round_end');
+    }
+  }
+}
+
+function appendChatMessage(msg) {
+  const box = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg' + (msg.isCorrect ? ' correct' : '') + (msg.isSystem ? ' system' : '');
+
+  if (msg.isSystem) {
+    div.textContent = msg.message;
+  } else {
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'cn';
+    nameSpan.style.color = getAvatarColor(msg.playerName || '?');
+    nameSpan.textContent = msg.playerName + ':';
+    div.appendChild(nameSpan);
+    div.appendChild(document.createTextNode(' ' + msg.message));
+  }
+
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function appendLocalSystem(text) {
+  const box = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg system';
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ============================================================
+// SECURITY: prevent XSS
+// ============================================================
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+window.addEventListener('load', () => {
+  initFirebase();
+});
+</script>
+</body>
+</html>
