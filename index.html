@@ -618,7 +618,7 @@ document.getElementById('inp-code').addEventListener('input',function(){ this.va
 async function createRoom(){
   if(!db) return err('Firebase tidak terhubung!');
   roomId=rnd(); isHost=true;
-  await db.ref(`rooms/${roomId}`).set({ host:myId, status:'waiting', gameMode:null, fixedCategory:null, currentRound:0, maxRounds:MAX_ROUNDS, currentDrawer:null, currentWord:null, wordChoices:null, currentCategory:null, roundStartTime:null, pickStartTime:null, correctGuessers:null, roundId:null });
+  await db.ref(`rooms/${roomId}`).set({ host:myId, status:'waiting', gameMode:null, fixedCategory:null, currentRound:0, maxRounds:MAX_ROUNDS, currentDrawer:null, currentWord:null, wordChoices:null, currentCategory:null, roundStartTime:null, pickStartTime:null, correctGuessers:null, roundId:null, canvasClearedAt:null });
   await db.ref(`rooms/${roomId}/players/${myId}`).set({ name:myName, score:0, online:true });
   db.ref(`rooms/${roomId}/players/${myId}/online`).onDisconnect().set(false);
   enterWaiting();
@@ -716,7 +716,7 @@ async function launchGame(mode, fixedCat){
     currentCategory:cat,
     roundStartTime:null,
     pickStartTime:firebase.database.ServerValue.TIMESTAMP,
-    correctGuessers:null,
+    correctGuessers:null, canvasClearedAt:null,
     drawerOrder:players, drawerIndex:0,
     roundId:Date.now()
   });
@@ -739,7 +739,7 @@ async function nextRound(snap){
     currentCategory:cat,
     roundStartTime:null,
     pickStartTime:firebase.database.ServerValue.TIMESTAMP,
-    correctGuessers:null,
+    correctGuessers:null, canvasClearedAt:null,
     drawerIndex:ni,
     roundId:Date.now()
   });
@@ -783,6 +783,7 @@ function enterGame(){
   });
 
   strokesRef=db.ref(`rooms/${roomId}/strokes`);
+  on(db.ref(`rooms/${roomId}/canvasClearedAt`),'value',s=>{ if(s.val()) clearCanvas(); });
   on(strokesRef,'child_added',s=>{ const d=s.val(); if(d) drawStroke(d); });
   on(db.ref(`rooms/${roomId}/chat`),'child_added',s=>{ const m=s.val(); if(m) appendMsg(m); });
 }
@@ -994,7 +995,7 @@ function initCanvas(){
   });
   document.getElementById('sz').addEventListener('input',e=>{ brushSz=parseInt(e.target.value); });
   document.getElementById('clear-btn').addEventListener('click',()=>{
-    if(!isDrawer) return; clearCanvas(); db.ref(`rooms/${roomId}/strokes`).remove();
+    if(!isDrawer) return; clearCanvas(); db.ref(`rooms/${roomId}/strokes`).remove(); db.ref(`rooms/${roomId}/canvasClearedAt`).set(firebase.database.ServerValue.TIMESTAMP);
   });
 }
 
