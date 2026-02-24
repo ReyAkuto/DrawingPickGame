@@ -681,7 +681,7 @@
     <div class="divider"></div>
     <div class="form-group">
       <label>Kode room</label>
-      <input id="room-code-input" type="text" placeholder="Masukkan kode room…" maxlength="6" autocomplete="off"
+      <input id="room-code-input" type="text" placeholder="Masukkan kode room…" maxlength="4" autocomplete="off"
              style="text-transform:uppercase;letter-spacing:.15em;" />
     </div>
     <button class="btn btn-secondary" id="btn-join">Gabung Room</button>
@@ -876,7 +876,7 @@ const CHAT_COOLDOWN_MS = 1200;
 // HELPERS
 // ============================================================
 function genId() {
-  return Math.random().toString(36).slice(2,10).toUpperCase();
+  return Math.floor(1000 + Math.random() * 9000).toString();
 }
 function genPlayerId() {
   return 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
@@ -984,7 +984,7 @@ document.getElementById('btn-join').addEventListener('click', () => {
   const name = document.getElementById('player-name').value.trim();
   const code = document.getElementById('room-code-input').value.trim().toUpperCase();
   if (!name) return showError('Masukkan nama kamu dulu!');
-  if (!code || code.length !== 6) return showError('Kode room harus 6 karakter!');
+  if (!code || code.length !== 4) return showError('Kode room harus 4 angka!');
   playerName = name;
   playerId = genPlayerId();
   joinRoom(code);
