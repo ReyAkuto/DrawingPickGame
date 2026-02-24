@@ -942,7 +942,7 @@ function removeAllListeners() {
 // ============================================================
 function initFirebase() {
   try {
-    firebase.initializeApp(FIREBASE_CONFIG);
+    firebase.initializeApp(firebaseConfig);
     db = firebase.database();
     showScreen('lobby-screen');
   } catch(e) {
