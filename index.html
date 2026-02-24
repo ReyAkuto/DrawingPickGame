@@ -5,54 +5,45 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>SketchCrew — Tebak Gambar Multiplayer</title>
 
-  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-
-  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 
   <style>
+    /* ── VARIABLES ── */
     :root {
-      --bg:        #0d0f14;
-      --surface:   #161922;
-      --surface2:  #1e2230;
-      --border:    #2a2f42;
-      --accent:    #6c63ff;
-      --accent2:   #ff6584;
-      --green:     #43e97b;
-      --gold:      #ffd166;
-      --text:      #e8eaf2;
-      --muted:     #6b7194;
-      --radius:    14px;
-      --radius-sm: 8px;
-      --shadow:    0 8px 40px rgba(0,0,0,.55);
+      --bg:       #0d0f14;
+      --surface:  #161922;
+      --surface2: #1e2230;
+      --border:   #2a2f42;
+      --accent:   #6c63ff;
+      --accent2:  #ff6584;
+      --green:    #43e97b;
+      --gold:     #ffd166;
+      --text:     #e8eaf2;
+      --muted:    #6b7194;
+      --r:        14px;
+      --rs:       8px;
+      --shadow:   0 8px 40px rgba(0,0,0,.55);
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; }
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-    }
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); }
 
     /* ── SCREENS ── */
-    .screen { display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
-    .screen.active { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .screen { display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0;
+              flex-direction: column; align-items: center; justify-content: center; }
+    .screen.active { display: flex; }
 
-    /* ── LOBBY ── */
-    #lobby-screen {
-      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(108,99,255,.18) 0%, transparent 70%), var(--bg);
-      padding: 24px 16px;
-    }
-    .lobby-card {
+    /* ── SHARED CARD ── */
+    .card {
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: 24px; padding: 36px 32px;
-      width: 100%; max-width: 440px;
-      box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 22px;
+      border-radius: 24px; padding: 32px 28px;
+      width: 100%; max-width: 460px; box-shadow: var(--shadow);
+      display: flex; flex-direction: column; gap: 20px;
     }
+    .divider { height: 1px; background: var(--border); }
     .logo { text-align: center; }
     .logo h1 {
       font-family: 'Syne', sans-serif; font-weight: 800; font-size: 2.2rem; letter-spacing: -1px;
@@ -60,59 +51,60 @@
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
     .logo p { color: var(--muted); font-size: .85rem; margin-top: 4px; }
-    .divider { height: 1px; background: var(--border); }
-    .form-group { display: flex; flex-direction: column; gap: 8px; }
-    .form-group label { font-size: .78rem; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+    /* ── FORMS ── */
+    .fg { display: flex; flex-direction: column; gap: 8px; }
+    .fg label { font-size: .75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
     input[type="text"] {
       width: 100%; padding: 12px 16px;
       background: var(--surface2); border: 1px solid var(--border);
-      border-radius: var(--radius-sm); color: var(--text);
+      border-radius: var(--rs); color: var(--text);
       font-family: 'DM Sans', sans-serif; font-size: .95rem;
       outline: none; transition: border-color .2s;
     }
     input[type="text"]:focus { border-color: var(--accent); }
     input[type="text"]::placeholder { color: var(--muted); }
+
+    /* ── BUTTONS ── */
     .btn {
-      padding: 13px 20px; border: none; border-radius: var(--radius-sm); cursor: pointer;
+      padding: 13px 20px; border: none; border-radius: var(--rs); cursor: pointer;
       font-family: 'Syne', sans-serif; font-weight: 700; font-size: .9rem;
-      letter-spacing: .02em; transition: all .18s;
+      letter-spacing: .02em; transition: all .18s; white-space: nowrap;
     }
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-primary:hover { background: #5a52e0; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(108,99,255,.4); }
     .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
     .btn-secondary:hover { background: var(--border); }
-    .btn-green { background: var(--green); color: #0d0f14; font-family: 'Syne', sans-serif; font-weight: 700; }
+    .btn-green { background: var(--green); color: #0d0f14; }
     .btn-green:hover { background: #32d46a; transform: translateY(-1px); }
-    .btn:disabled { opacity: .45; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
-    .btn-group { display: flex; gap: 10px; }
-    .btn-group .btn { flex: 1; }
-    .error-msg { color: var(--accent2); font-size: .82rem; min-height: 18px; }
+    .btn:disabled { opacity: .4; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+    .btn-row { display: flex; gap: 10px; }
+    .btn-row .btn { flex: 1; }
+    .err { color: var(--accent2); font-size: .82rem; min-height: 16px; }
 
-    /* ── WAITING ROOM ── */
-    #waiting-screen {
+    /* ── LOBBY ── */
+    #lobby-screen {
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(108,99,255,.18) 0%, transparent 70%), var(--bg);
       padding: 24px 16px;
-      background: radial-gradient(ellipse 60% 50% at 80% 20%, rgba(255,101,132,.1) 0%, transparent 60%), var(--bg);
     }
-    .waiting-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 24px; padding: 28px 26px;
-      width: 100%; max-width: 480px;
-      box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 20px;
+
+    /* ── WAITING ── */
+    #waiting-screen {
+      background: radial-gradient(ellipse 60% 50% at 80% 20%, rgba(255,101,132,.1) 0%, transparent 60%), var(--bg);
+      padding: 24px 16px;
     }
     .room-header { display: flex; align-items: center; justify-content: space-between; }
-    .room-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.3rem; }
-    .room-code-badge {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 40px; padding: 6px 18px;
-      font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.2rem;
-      color: var(--gold); cursor: pointer; display: flex; align-items: center; gap: 8px;
-      letter-spacing: .2em; transition: background .2s;
+    .room-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.25rem; }
+    .code-badge {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 40px;
+      padding: 6px 18px; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.2rem;
+      color: var(--gold); cursor: pointer; letter-spacing: .2em; transition: background .2s;
     }
-    .room-code-badge:hover { background: var(--border); }
-    .players-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
-    .player-card-mini {
+    .code-badge:hover { background: var(--border); }
+    .players-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); gap: 10px; }
+    .pcard {
       background: var(--surface2); border: 1px solid var(--border);
-      border-radius: var(--radius-sm); padding: 12px 14px;
+      border-radius: var(--rs); padding: 12px 14px;
       display: flex; align-items: center; gap: 10px;
     }
     .avatar {
@@ -120,268 +112,308 @@
       display: flex; align-items: center; justify-content: center;
       font-family: 'Syne', sans-serif; font-weight: 700; font-size: .85rem; flex-shrink: 0;
     }
-    .player-card-mini .pname { font-size: .82rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .host-tag { font-size: .6rem; background: var(--gold); color: var(--bg); border-radius: 4px; padding: 1px 5px; font-weight: 700; text-transform: uppercase; }
-    .waiting-status { text-align: center; color: var(--muted); font-size: .85rem; }
+    .pcard .pname { font-size: .82rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .host-tag { font-size: .58rem; background: var(--gold); color: var(--bg); border-radius: 4px; padding: 1px 5px; font-weight: 700; text-transform: uppercase; }
+    .wait-status { text-align: center; color: var(--muted); font-size: .85rem; }
 
-    /* ── THEME PICKER MODAL ── */
-    .modal-backdrop {
-      position: fixed; inset: 0; background: rgba(0,0,0,.8);
+    /* ── GAME MODE MODAL ── */
+    .modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,.82);
       display: flex; align-items: center; justify-content: center;
       z-index: 200; padding: 20px;
     }
-    .modal-backdrop.hidden { display: none; }
-    .modal-card {
+    .modal.hidden { display: none; }
+    .modal-box {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 22px; padding: 28px 24px;
-      width: 100%; max-width: 420px;
-      box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 18px;
-      animation: modal-in .22s ease both;
+      width: 100%; max-width: 420px; box-shadow: var(--shadow);
+      display: flex; flex-direction: column; gap: 18px;
+      animation: pop-in .2s ease both;
     }
-    @keyframes modal-in { from { transform: scale(.93); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes pop-in { from{transform:scale(.93);opacity:0} to{transform:none;opacity:1} }
     .modal-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.25rem; text-align: center; }
-    .modal-sub { color: var(--muted); font-size: .83rem; text-align: center; margin-top: -8px; }
-    .theme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-    .random-btn {
-      grid-column: span 2;
-      background: linear-gradient(135deg, rgba(108,99,255,.15), rgba(255,101,132,.1));
-      border: 2px solid rgba(108,99,255,.35);
-      border-radius: var(--radius-sm); padding: 14px;
-      text-align: center; cursor: pointer;
-      font-family: 'Syne', sans-serif; font-weight: 700; font-size: .95rem;
-      display: flex; align-items: center; justify-content: center; gap: 10px;
-      transition: all .15s;
-    }
-    .random-btn:hover, .random-btn.sel { border-color: var(--accent); background: rgba(108,99,255,.2); }
-    .theme-btn {
+    .modal-sub { color: var(--muted); font-size: .83rem; text-align: center; margin-top: -10px; }
+
+    /* Mode pick cards */
+    .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .mode-card {
       background: var(--surface2); border: 2px solid var(--border);
-      border-radius: var(--radius-sm); padding: 14px 10px;
-      text-align: center; cursor: pointer;
-      display: flex; flex-direction: column; gap: 4px;
-      transition: all .15s;
+      border-radius: 14px; padding: 20px 14px; text-align: center; cursor: pointer;
+      display: flex; flex-direction: column; gap: 8px; transition: all .15s;
     }
-    .theme-btn:hover, .theme-btn.sel { border-color: var(--accent); background: rgba(108,99,255,.1); }
-    .theme-btn .t-emoji { font-size: 1.5rem; }
-    .theme-btn .t-name { font-family: 'Syne', sans-serif; font-weight: 700; font-size: .8rem; }
-    .theme-btn .t-count { font-size: .68rem; color: var(--muted); }
+    .mode-card:hover { border-color: var(--accent); background: rgba(108,99,255,.08); }
+    .mode-card.sel { border-color: var(--accent); background: rgba(108,99,255,.14); }
+    .mode-card .mc-icon { font-size: 2rem; }
+    .mode-card .mc-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: .95rem; }
+    .mode-card .mc-desc { font-size: .75rem; color: var(--muted); line-height: 1.4; }
+
+    /* Category grid inside modal */
+    .cat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .cat-btn {
+      background: var(--surface2); border: 2px solid var(--border);
+      border-radius: var(--rs); padding: 12px 8px; text-align: center;
+      cursor: pointer; transition: all .15s;
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .cat-btn:hover { border-color: var(--accent); }
+    .cat-btn.sel { border-color: var(--accent); background: rgba(108,99,255,.12); }
+    .cat-btn .ce { font-size: 1.4rem; }
+    .cat-btn .cn { font-family: 'Syne', sans-serif; font-weight: 700; font-size: .78rem; }
+    .cat-btn .ck { font-size: .65rem; color: var(--muted); }
 
     /* ── GAME SCREEN ── */
     #game-screen { width: 100%; height: 100%; display: none; flex-direction: column; background: var(--bg); overflow: hidden; }
     #game-screen.active { display: flex; }
 
-    .game-topbar {
-      flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--border); gap: 10px;
+    /* Topbar */
+    .topbar {
+      flex-shrink: 0; display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; background: var(--surface); border-bottom: 1px solid var(--border);
     }
-    .topbar-left, .topbar-right { display: flex; align-items: center; gap: 10px; flex: 1; }
-    .topbar-right { justify-content: flex-end; }
-    .round-badge {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 40px; padding: 4px 12px; font-size: .75rem; font-weight: 600;
-      color: var(--muted); font-family: 'Syne', sans-serif;
+    .tb-left, .tb-right { display: flex; align-items: center; gap: 8px; flex: 1; }
+    .tb-right { justify-content: flex-end; }
+    .pill {
+      border-radius: 40px; padding: 4px 12px;
+      font-size: .72rem; font-weight: 700; font-family: 'Syne', sans-serif;
     }
-    .theme-badge {
-      background: rgba(108,99,255,.15); border: 1px solid rgba(108,99,255,.3);
-      border-radius: 40px; padding: 4px 12px; font-size: .75rem; font-weight: 600;
-      color: var(--accent); font-family: 'Syne', sans-serif;
-    }
-    .timer-ring-wrap { position: relative; width: 44px; height: 44px; flex-shrink: 0; }
-    #timer-svg { position: absolute; top: 0; left: 0; transform: rotate(-90deg); }
-    #timer-circle {
+    .pill-muted { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); }
+    .pill-accent { background: rgba(108,99,255,.15); border: 1px solid rgba(108,99,255,.3); color: var(--accent); }
+
+    /* Timer */
+    .timer-wrap { position: relative; width: 42px; height: 42px; flex-shrink: 0; }
+    #timer-svg { position: absolute; top:0; left:0; transform: rotate(-90deg); }
+    #timer-ring {
       fill: none; stroke: var(--accent); stroke-width: 3;
-      stroke-linecap: round; stroke-dasharray: 120; stroke-dashoffset: 0;
+      stroke-linecap: round; stroke-dasharray: 116; stroke-dashoffset: 0;
       transition: stroke-dashoffset 1s linear, stroke .4s;
     }
-    .timer-number {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-      font-family: 'Syne', sans-serif; font-weight: 800; font-size: .95rem;
+    .timer-num {
+      position: absolute; top:50%; left:50%; transform: translate(-50%,-50%);
+      font-family: 'Syne', sans-serif; font-weight: 800; font-size: .9rem;
     }
 
-    .game-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    /* Canvas area */
+    .game-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     .canvas-wrap { flex: 1; position: relative; min-height: 0; background: #1a1d26; overflow: hidden; }
-    #game-canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+    #canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
-    .word-hint-bar {
-      position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
-      display: flex; gap: 6px; align-items: center; pointer-events: none;
-      flex-wrap: wrap; justify-content: center; max-width: 92%;
-    }
-    .hint-letter {
-      width: 22px; height: 28px; background: rgba(14,16,20,.75);
-      border-bottom: 2px solid var(--text);
-      display: flex; align-items: center; justify-content: center;
-      font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1rem;
-      color: var(--text); border-radius: 3px;
-    }
-    .hint-letter.revealed { background: rgba(67,233,123,.12); border-bottom-color: var(--green); color: var(--green); }
-
-    .drawer-word-bar {
+    /* Drawer word reveal bar */
+    .drawer-bar {
       position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
       background: rgba(13,15,20,.9); border: 1px solid var(--accent);
       border-radius: 40px; padding: 6px 20px;
       font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1rem;
-      color: var(--accent); pointer-events: none; white-space: nowrap; backdrop-filter: blur(8px);
+      color: var(--accent); pointer-events: none; white-space: nowrap;
     }
 
-    .phase-overlay {
-      position: absolute; inset: 0; background: rgba(13,15,20,.92);
+    /* Word hint underscores */
+    .hint-bar {
+      position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 5px; align-items: center; pointer-events: none;
+      flex-wrap: wrap; justify-content: center; max-width: 92%;
+    }
+    .hl {
+      min-width: 20px; height: 28px; background: rgba(13,15,20,.75);
+      border-bottom: 2px solid var(--text);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Syne', sans-serif; font-weight: 700; font-size: .95rem;
+      color: var(--text); border-radius: 3px; padding: 0 3px;
+    }
+    .hl.rev { background: rgba(67,233,123,.12); border-bottom-color: var(--green); color: var(--green); }
+    @keyframes hl-in { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+    .hl.rev { animation: hl-in .2s ease both; }
+
+    /* ─── PHASE OVERLAYS ─── */
+    .overlay {
+      position: absolute; inset: 0; z-index: 20;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 14px; z-index: 10;
+      gap: 14px; padding: 20px;
+      background: rgba(13,15,20,.93);
     }
-    .phase-overlay.hidden { display: none; }
-    .phase-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.8rem; text-align: center; }
-    .phase-sub { color: var(--muted); font-size: .9rem; text-align: center; max-width: 290px; line-height: 1.7; }
-    .phase-word { font-family: 'Syne', sans-serif; font-size: 2rem; font-weight: 800; color: var(--gold); letter-spacing: 2px; text-align: center; }
-    .phase-countdown { font-family: 'Syne', sans-serif; font-weight: 700; font-size: .88rem; color: var(--muted); }
+    .overlay.hidden { display: none; }
+    .ov-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.8rem; text-align: center; }
+    .ov-sub { color: var(--muted); font-size: .88rem; text-align: center; max-width: 300px; line-height: 1.6; }
+    .ov-word { font-family: 'Syne', sans-serif; font-size: 2rem; font-weight: 800; color: var(--gold); letter-spacing: 3px; text-align: center; }
+    .ov-cd { font-family: 'Syne', sans-serif; font-weight: 700; font-size: .85rem; color: var(--muted); }
 
-    .draw-toolbar {
-      flex-shrink: 0; display: flex; align-items: center; gap: 10px;
+    /* Word choice cards (for drawer during picking phase) */
+    .word-choices { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; width: 100%; max-width: 380px; }
+    .wc {
+      flex: 1; min-width: 90px; max-width: 160px;
+      background: var(--surface2); border: 2px solid var(--border);
+      border-radius: 14px; padding: 18px 12px; text-align: center; cursor: pointer;
+      font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1rem;
+      color: var(--text); transition: all .18s; line-height: 1.3;
+    }
+    .wc:hover { border-color: var(--accent); background: rgba(108,99,255,.12); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(108,99,255,.25); }
+    .pick-timer {
+      font-family: 'Syne', sans-serif; font-weight: 700; font-size: .85rem; color: var(--accent2);
+    }
+
+    /* Drawing toolbar */
+    .toolbar {
+      flex-shrink: 0; display: flex; align-items: center; gap: 9px;
       padding: 8px 12px; background: var(--surface); border-top: 1px solid var(--border);
       overflow-x: auto; scrollbar-width: none;
     }
-    .draw-toolbar::-webkit-scrollbar { display: none; }
-    .color-swatch {
-      width: 28px; height: 28px; border-radius: 50%;
+    .toolbar::-webkit-scrollbar { display: none; }
+    .swatch {
+      width: 26px; height: 26px; border-radius: 50%;
       border: 2px solid transparent; cursor: pointer; flex-shrink: 0;
       transition: transform .15s, border-color .15s;
     }
-    .color-swatch:hover { transform: scale(1.18); }
-    .color-swatch.active { border-color: var(--text); transform: scale(1.18); }
-    .toolbar-sep { width: 1px; height: 28px; background: var(--border); flex-shrink: 0; }
-    .tool-btn {
-      background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm);
-      color: var(--text); width: 36px; height: 36px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; flex-shrink: 0; font-size: 1rem; transition: background .15s, border-color .15s;
+    .swatch:hover { transform: scale(1.2); }
+    .swatch.active { border-color: #fff; transform: scale(1.2); }
+    .tsep { width: 1px; height: 26px; background: var(--border); flex-shrink: 0; }
+    .tbtn {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: var(--rs);
+      width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0; font-size: .95rem; transition: background .15s, border-color .15s;
     }
-    .tool-btn:hover { background: var(--border); }
-    .tool-btn.active { background: rgba(108,99,255,.2); border-color: var(--accent); }
-    .size-slider {
+    .tbtn:hover { background: var(--border); }
+    .tbtn.active { background: rgba(108,99,255,.2); border-color: var(--accent); }
+    .szslider {
       -webkit-appearance: none; appearance: none;
       height: 4px; background: var(--border); border-radius: 2px;
-      width: 80px; flex-shrink: 0; outline: none;
+      width: 75px; flex-shrink: 0; outline: none;
     }
-    .size-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; }
-    .size-slider::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; border: none; }
+    .szslider::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+    .szslider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; background: var(--accent); cursor: pointer; border: none; }
 
-    .bottom-section {
+    /* Bottom: scoreboard + chat */
+    .bottom {
       flex-shrink: 0; display: flex;
-      height: 30vh; min-height: 160px; max-height: 280px;
+      height: 30vh; min-height: 155px; max-height: 275px;
       border-top: 1px solid var(--border); background: var(--surface); overflow: hidden;
     }
-    .scoreboard { width: 130px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
-    .section-title {
-      padding: 8px 12px; font-size: .7rem; font-weight: 700;
+    .scores {
+      width: 125px; flex-shrink: 0; border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    @media(min-width:600px){ .scores{width:155px;} .bottom{height:28vh;} }
+    .sec-title {
+      padding: 7px 10px; font-size: .68rem; font-weight: 700;
       text-transform: uppercase; letter-spacing: .07em; color: var(--muted);
       border-bottom: 1px solid var(--border); flex-shrink: 0;
     }
-    .player-list { flex: 1; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-    .player-row {
-      display: flex; align-items: center; gap: 8px; padding: 6px 10px;
-      border-bottom: 1px solid rgba(42,47,66,.5); transition: background .15s;
+    .plist { flex: 1; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    .prow {
+      display: flex; align-items: center; gap: 7px; padding: 6px 9px;
+      border-bottom: 1px solid rgba(42,47,66,.4); transition: background .15s;
     }
-    .player-row:hover { background: var(--surface2); }
-    .player-row .avatar { width: 26px; height: 26px; font-size: .7rem; flex-shrink: 0; }
-    .player-row .pinfo { flex: 1; min-width: 0; }
-    .player-row .pname { font-size: .78rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .player-row .pscore { font-family: 'Syne', sans-serif; font-weight: 700; font-size: .8rem; color: var(--gold); flex-shrink: 0; }
-    .drawer-indicator { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; flex-shrink: 0; }
+    .prow:hover { background: var(--surface2); }
+    .prow .avatar { width: 24px; height: 24px; font-size: .67rem; flex-shrink: 0; }
+    .prow .pnm { flex: 1; font-size: .76rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .prow .pts { font-family: 'Syne', sans-serif; font-weight: 700; font-size: .78rem; color: var(--gold); flex-shrink: 0; }
+    .draw-dot { width: 5px; height: 5px; background: var(--accent); border-radius: 50%; flex-shrink: 0; }
 
-    .chat-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
-    .chat-messages {
-      flex: 1; overflow-y: auto; padding: 8px 10px;
-      display: flex; flex-direction: column; gap: 4px;
+    /* Chat */
+    .chat { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+    .chat-msgs {
+      flex: 1; overflow-y: auto; padding: 7px 9px;
+      display: flex; flex-direction: column; gap: 3px;
       scrollbar-width: thin; scrollbar-color: var(--border) transparent;
     }
-    .chat-msg { font-size: .8rem; line-height: 1.4; word-break: break-word; }
-    .chat-msg .cn { font-weight: 600; margin-right: 4px; }
-    .chat-msg.correct { background: rgba(67,233,123,.09); border-left: 2px solid var(--green); padding: 4px 8px; border-radius: 4px; color: var(--green); }
-    .chat-msg.system { color: var(--muted); font-style: italic; font-size: .75rem; }
-    .chat-input-row { display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
-    .chat-input-row input { flex: 1; padding: 8px 12px; font-size: .82rem; border-radius: 20px; }
-    .chat-input-row .btn { padding: 8px 14px; font-size: .8rem; border-radius: 20px; }
+    .cmsg { font-size: .79rem; line-height: 1.4; word-break: break-word; }
+    .cmsg .cn { font-weight: 600; margin-right: 3px; }
+    .cmsg.correct { background: rgba(67,233,123,.09); border-left: 2px solid var(--green); padding: 4px 8px; border-radius: 4px; color: var(--green); }
+    .cmsg.sys { color: var(--muted); font-style: italic; font-size: .73rem; }
+    .chat-inp { display: flex; gap: 7px; padding: 7px 9px; border-top: 1px solid var(--border); flex-shrink: 0; }
+    .chat-inp input { flex: 1; padding: 8px 11px; font-size: .81rem; border-radius: 20px; }
+    .chat-inp .btn { padding: 8px 13px; font-size: .79rem; border-radius: 20px; }
 
+    /* Toast */
     .toast {
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(60px);
+      position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(60px);
       background: var(--surface); border: 1px solid var(--border); border-radius: 40px;
-      padding: 10px 22px; font-size: .85rem; font-weight: 500; color: var(--text);
+      padding: 9px 20px; font-size: .83rem; font-weight: 500; color: var(--text);
       box-shadow: var(--shadow); transition: transform .3s ease; z-index: 999; white-space: nowrap;
     }
     .toast.show { transform: translateX(-50%) translateY(0); }
 
-    #loading-screen { background: var(--bg); color: var(--muted); font-size: .9rem; gap: 12px; }
-    .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    /* Loading */
+    #loading { background: var(--bg); color: var(--muted); font-size: .9rem; gap: 12px; }
+    .spin { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: sp .7s linear infinite; }
+    @keyframes sp { to{transform:rotate(360deg)} }
 
-    @keyframes correct-flash { 0%{box-shadow:0 0 0 0 rgba(67,233,123,.6)} 70%{box-shadow:0 0 0 18px rgba(67,233,123,0)} 100%{box-shadow:0 0 0 0 rgba(67,233,123,0)} }
-    .canvas-wrap.flash { animation: correct-flash .65s ease; }
-
-    @keyframes canvas-wipe { 0%{opacity:1} 40%{opacity:.2} 100%{opacity:1} }
-    .canvas-wrap.wiping { animation: canvas-wipe .35s ease; }
-
-    @media (min-width: 600px) { .scoreboard { width: 160px; } .bottom-section { height: 28vh; } }
-    @keyframes hint-in { from{transform:translateY(4px);opacity:0} to{transform:none;opacity:1} }
-    .hint-letter.revealed { animation: hint-in .2s ease both; }
+    /* Animations */
+    @keyframes flash-green { 0%{box-shadow:0 0 0 0 rgba(67,233,123,.6)} 70%{box-shadow:0 0 0 18px rgba(67,233,123,0)} 100%{box-shadow:0 0 0 0 rgba(67,233,123,0)} }
+    .canvas-wrap.flash { animation: flash-green .6s ease; }
+    @keyframes wipe { 0%{opacity:1} 40%{opacity:.15} 100%{opacity:1} }
+    .canvas-wrap.wipe { animation: wipe .35s ease; }
   </style>
 </head>
 <body>
 
 <!-- LOADING -->
-<div id="loading-screen" class="screen active">
-  <div class="spinner"></div>
-  <span>Menghubungkan…</span>
+<div id="loading" class="screen active">
+  <div class="spin"></div><span>Menghubungkan…</span>
 </div>
 
 <!-- LOBBY -->
 <div id="lobby-screen" class="screen">
-  <div class="lobby-card">
-    <div class="logo">
-      <h1>✏️ SketchCrew</h1>
-      <p>Multiplayer tebak gambar realtime</p>
-    </div>
+  <div style="background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(108,99,255,.18) 0%,transparent 70%),var(--bg);position:absolute;inset:0;"></div>
+  <div class="card" style="position:relative;z-index:1;margin:20px 16px;">
+    <div class="logo"><h1>✏️ SketchCrew</h1><p>Multiplayer tebak gambar realtime</p></div>
     <div class="divider"></div>
-    <div class="form-group">
-      <label>Nama pemain</label>
-      <input id="player-name" type="text" placeholder="Masukkan nama kamu…" maxlength="16" autocomplete="off" />
-    </div>
-    <div class="btn-group">
-      <button class="btn btn-primary" id="btn-create">Buat Room</button>
-    </div>
+    <div class="fg"><label>Nama pemain</label>
+      <input id="inp-name" type="text" placeholder="Masukkan nama kamu…" maxlength="16" autocomplete="off" /></div>
+    <button class="btn btn-primary" id="btn-create">✨ Buat Room Baru</button>
     <div class="divider"></div>
-    <div class="form-group">
-      <label>Kode room (4 angka)</label>
-      <input id="room-code-input" type="text" placeholder="Contoh: 4821" maxlength="4"
-             autocomplete="off" inputmode="numeric" pattern="[0-9]*" style="letter-spacing:.25em;font-family:'Syne',sans-serif;font-weight:700;" />
-    </div>
+    <div class="fg"><label>Kode room (4 angka)</label>
+      <input id="inp-code" type="text" placeholder="Contoh: 4821" maxlength="4"
+             inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+             style="letter-spacing:.25em;font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;" /></div>
     <button class="btn btn-secondary" id="btn-join">Gabung Room</button>
-    <div id="lobby-error" class="error-msg"></div>
+    <div id="lobby-err" class="err"></div>
   </div>
 </div>
 
 <!-- WAITING ROOM -->
-<div id="waiting-screen" class="screen">
-  <div class="waiting-card">
+<div id="waiting-screen" class="screen" style="background:radial-gradient(ellipse 60% 50% at 80% 20%,rgba(255,101,132,.1) 0%,transparent 60%),var(--bg);padding:24px 16px;">
+  <div class="card">
     <div class="room-header">
       <span class="room-title">Ruang Tunggu</span>
-      <span class="room-code-badge" id="copy-code-btn" title="Klik untuk salin">
-        🔑 <span id="display-room-code">0000</span>
-      </span>
+      <span class="code-badge" id="copy-code">🔑 <span id="disp-code">0000</span></span>
     </div>
-    <div class="players-grid" id="waiting-players"></div>
-    <div class="waiting-status" id="waiting-status">Menunggu pemain lain…</div>
-    <button class="btn btn-primary" id="btn-start" disabled>🎨 Pilih Tema & Mulai</button>
+    <div class="players-grid" id="wait-players"></div>
+    <div class="wait-status" id="wait-status">Menunggu pemain lain…</div>
+    <button class="btn btn-primary" id="btn-start" disabled>🚀 Atur & Mulai Game</button>
   </div>
 </div>
 
-<!-- THEME PICKER MODAL -->
-<div class="modal-backdrop hidden" id="theme-modal">
-  <div class="modal-card">
-    <div class="modal-title">🎨 Pilih Tema Ronde</div>
-    <div class="modal-sub">Host memilih kategori untuk ronde ini</div>
-    <div class="theme-grid" id="theme-grid"></div>
-    <div class="btn-group">
-      <button class="btn btn-secondary" id="btn-cancel-theme">Batal</button>
-      <button class="btn btn-green" id="btn-confirm-theme">▶ Mulai Ronde!</button>
+<!-- GAME MODE MODAL (shown once, by host before starting) -->
+<div class="modal hidden" id="mode-modal">
+  <div class="modal-box">
+    <div class="modal-title">⚙️ Pengaturan Game</div>
+    <div class="modal-sub">Dipilih sekali oleh host untuk seluruh game</div>
+
+    <!-- Step 1: pick mode -->
+    <div id="step-mode">
+      <div style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;">Mode Tema</div>
+      <div class="mode-grid">
+        <div class="mode-card sel" data-mode="random" onclick="pickMode('random')">
+          <div class="mc-icon">🎲</div>
+          <div class="mc-title">Acak Tema</div>
+          <div class="mc-desc">Tema berubah otomatis tiap ronde</div>
+        </div>
+        <div class="mode-card" data-mode="fixed" onclick="pickMode('fixed')">
+          <div class="mc-icon">📌</div>
+          <div class="mc-title">Satu Tema</div>
+          <div class="mc-desc">Semua ronde pakai tema yang sama</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: pick fixed category (only shown if mode=fixed) -->
+    <div id="step-cat" style="display:none;">
+      <div style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;">Pilih Kategori</div>
+      <div class="cat-grid" id="cat-grid"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="closeModeModal()">Batal</button>
+      <button class="btn btn-green" id="btn-confirm-mode">▶ Mulai Game!</button>
     </div>
   </div>
 </div>
@@ -389,65 +421,81 @@
 <!-- GAME SCREEN -->
 <div id="game-screen" class="screen">
 
-  <div class="game-topbar">
-    <div class="topbar-left">
-      <span class="round-badge" id="round-label">Ronde 1</span>
-      <span class="theme-badge" id="category-label">—</span>
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="tb-left">
+      <span class="pill pill-muted" id="round-lbl">Ronde 1</span>
+      <span class="pill pill-accent" id="cat-lbl">—</span>
     </div>
-    <div class="timer-ring-wrap">
-      <svg id="timer-svg" width="44" height="44">
-        <circle id="timer-circle" cx="22" cy="22" r="19"/>
+    <div class="timer-wrap">
+      <svg id="timer-svg" width="42" height="42">
+        <circle id="timer-ring" cx="21" cy="21" r="18"/>
       </svg>
-      <span class="timer-number" id="timer-number">60</span>
+      <span class="timer-num" id="timer-num">60</span>
     </div>
-    <div class="topbar-right">
-      <span style="font-size:.78rem;color:var(--muted);" id="topbar-drawer-label">–</span>
+    <div class="tb-right">
+      <span style="font-size:.75rem;color:var(--muted);" id="drawer-lbl">—</span>
     </div>
   </div>
 
-  <div class="game-main">
+  <!-- Body -->
+  <div class="game-body">
     <div class="canvas-wrap" id="canvas-wrap">
-      <canvas id="game-canvas"></canvas>
-      <div class="drawer-word-bar" id="drawer-word-bar" style="display:none;"></div>
-      <div class="word-hint-bar" id="word-hint-bar"></div>
-      <div class="phase-overlay" id="phase-overlay">
-        <div class="phase-title" id="phase-title">Bersiap…</div>
-        <div class="phase-sub" id="phase-sub"></div>
-        <div class="phase-word" id="phase-word" style="display:none;"></div>
-        <div class="phase-countdown" id="phase-countdown"></div>
+      <canvas id="canvas"></canvas>
+
+      <!-- Drawer's secret word -->
+      <div class="drawer-bar" id="drawer-bar" style="display:none;"></div>
+
+      <!-- Hint underscores for guessers -->
+      <div class="hint-bar" id="hint-bar"></div>
+
+      <!-- PHASE OVERLAY — covers canvas -->
+      <div class="overlay" id="overlay">
+        <div class="ov-title" id="ov-title">Bersiap…</div>
+        <div class="ov-sub"  id="ov-sub"></div>
+
+        <!-- Word choices (drawer picks) -->
+        <div class="word-choices hidden" id="word-choices"></div>
+        <div class="pick-timer hidden" id="pick-timer"></div>
+
+        <!-- Correct word reveal -->
+        <div class="ov-word hidden" id="ov-word"></div>
+        <div class="ov-cd" id="ov-cd"></div>
       </div>
     </div>
 
-    <div class="draw-toolbar" id="draw-toolbar">
-      <div class="color-swatch active" data-color="#ffffff" style="background:#ffffff;"></div>
-      <div class="color-swatch" data-color="#f94144" style="background:#f94144;"></div>
-      <div class="color-swatch" data-color="#f8961e" style="background:#f8961e;"></div>
-      <div class="color-swatch" data-color="#ffd166" style="background:#ffd166;"></div>
-      <div class="color-swatch" data-color="#43e97b" style="background:#43e97b;"></div>
-      <div class="color-swatch" data-color="#4cc9f0" style="background:#4cc9f0;"></div>
-      <div class="color-swatch" data-color="#6c63ff" style="background:#6c63ff;"></div>
-      <div class="color-swatch" data-color="#ff6584" style="background:#ff6584;"></div>
-      <div class="color-swatch" data-color="#a855f7" style="background:#a855f7;"></div>
-      <div class="color-swatch" data-color="#fb923c" style="background:#fb923c;"></div>
-      <div class="color-swatch" data-color="#0d0f14" style="background:#0d0f14;border:1px solid #2a2f42;"></div>
-      <div class="toolbar-sep"></div>
-      <div class="tool-btn" id="eraser-btn" title="Penghapus">🧹</div>
-      <input type="range" class="size-slider" id="size-slider" min="2" max="40" value="4" />
-      <div class="toolbar-sep"></div>
-      <div class="tool-btn" id="clear-btn" title="Bersihkan canvas">🗑️</div>
+    <!-- Drawing toolbar -->
+    <div class="toolbar" id="toolbar">
+      <div class="swatch active" data-c="#ffffff" style="background:#ffffff;"></div>
+      <div class="swatch" data-c="#f94144" style="background:#f94144;"></div>
+      <div class="swatch" data-c="#f8961e" style="background:#f8961e;"></div>
+      <div class="swatch" data-c="#ffd166" style="background:#ffd166;"></div>
+      <div class="swatch" data-c="#43e97b" style="background:#43e97b;"></div>
+      <div class="swatch" data-c="#4cc9f0" style="background:#4cc9f0;"></div>
+      <div class="swatch" data-c="#6c63ff" style="background:#6c63ff;"></div>
+      <div class="swatch" data-c="#ff6584" style="background:#ff6584;"></div>
+      <div class="swatch" data-c="#a855f7" style="background:#a855f7;"></div>
+      <div class="swatch" data-c="#fb923c" style="background:#fb923c;"></div>
+      <div class="swatch" data-c="#0d0f14" style="background:#0d0f14;border-color:#2a2f42;"></div>
+      <div class="tsep"></div>
+      <div class="tbtn" id="eraser-btn">🧹</div>
+      <input type="range" class="szslider" id="sz" min="2" max="40" value="4" />
+      <div class="tsep"></div>
+      <div class="tbtn" id="clear-btn">🗑️</div>
     </div>
 
-    <div class="bottom-section">
-      <div class="scoreboard">
-        <div class="section-title">Pemain</div>
-        <div class="player-list" id="game-player-list"></div>
+    <!-- Bottom: score + chat -->
+    <div class="bottom">
+      <div class="scores">
+        <div class="sec-title">Pemain</div>
+        <div class="plist" id="plist"></div>
       </div>
-      <div class="chat-panel">
-        <div class="section-title">Chat & Tebakan</div>
-        <div class="chat-messages" id="chat-messages"></div>
-        <div class="chat-input-row">
-          <input type="text" id="chat-input" placeholder="Tebak atau ngobrol…" maxlength="60" autocomplete="off" />
-          <button class="btn btn-primary" id="btn-send-chat">Kirim</button>
+      <div class="chat">
+        <div class="sec-title">Chat & Tebakan</div>
+        <div class="chat-msgs" id="chat-msgs"></div>
+        <div class="chat-inp">
+          <input type="text" id="chat-in" placeholder="Tebak atau ngobrol…" maxlength="60" autocomplete="off" />
+          <button class="btn btn-primary" id="btn-send">Kirim</button>
         </div>
       </div>
     </div>
@@ -459,525 +507,574 @@
 <script>
 /* ============================================================
    FIREBASE CONFIG
-   Struktur database:
+   ============================================================
+   DB STRUCTURE:
    rooms/{roomId}/
-     host, status, currentRound, maxRounds, currentDrawer,
-     currentWord, currentCategory, roundStartTime,
-     correctGuessers, drawerOrder, drawerIndex, roundId
+     host, status, gameMode('random'|'fixed'), fixedCategory,
+     currentRound, maxRounds, currentDrawer,
+     currentWord, wordChoices(arr), currentCategory,
+     roundStartTime, pickStartTime, correctGuessers,
+     drawerOrder, drawerIndex, roundId
      players/{pid}/ → name, score, online
-     chat/{pushId}/  → playerName, message, isCorrect, isSystem, timestamp
-     strokes/{pushId}/ → x(0-1), y(0-1), state, color, size, eraser, ts
-============================================================ */
+     chat/{k}/      → playerName, message, isCorrect, isSystem, timestamp
+     strokes/{k}/   → x,y,state,color,size,eraser,ts
+   ============================================================ */
 const firebaseConfig = {
-    apiKey: "AIzaSyAA5zPOoPgLkm4tHLYSZzk-OgkILxoeKwU",
-    authDomain: "drawingpickgame.firebaseapp.com",
-    databaseURL: "https://drawingpickgame-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "drawingpickgame",
-    storageBucket: "drawingpickgame.firebasestorage.app",
-    messagingSenderId: "1002361006200",
-    appId: "1:1002361006200:web:e36aaf45bc0cfb6a32e58d",
-    measurementId: "G-FYDN77LRBD"
-  };
-
-/* ============================================================
-   WORD LISTS — 8 kategori, 50+ kata tiap kategori
-============================================================ */
-const WORD_LISTS = {
-  "🐾 Hewan": [
-    "kucing","anjing","gajah","harimau","singa","burung","ikan","kuda","sapi","kerbau",
-    "kelinci","monyet","beruang","rubah","pinguin","katak","ular","buaya","jerapah","zebra",
-    "kanguru","koala","lumba-lumba","paus","hiu","elang","beo","merpati","cacing","laba-laba",
-    "kura-kura","rusa","kambing","domba","babi","itik","ayam","angsa","merak","flamingo",
-    "cheetah","serigala","badak","tapir","landak","berang-berang","musang","trenggiling","salamander","axolotl",
-    "capung","belalang","semut","lebah","kupu-kupu","udang","kepiting","cumi-cumi","gurita","lobster"
-  ],
-  "🍜 Makanan": [
-    "nasi","mie","sate","bakso","rendang","tempe","tahu","pizza","burger","roti",
-    "kue","coklat","es krim","sushi","nasi goreng","ayam goreng","gulai","soto","opor","lontong",
-    "ketoprak","gado-gado","siomay","pecel","rujak","martabak","pempek","cendol","klepon","onde-onde",
-    "donat","croissant","ramen","takoyaki","dim sum","hot dog","kebab","taco","pasta","lasagna",
-    "mangga","pisang","apel","jeruk","durian","rambutan","salak","nanas","pepaya","alpukat",
-    "es teh","kopi","jus jeruk","smoothie","bubble tea","wedang jahe","bajigur","susu","yogurt","keju"
-  ],
-  "🪑 Benda": [
-    "kursi","meja","lampu","pintu","jendela","buku","pensil","bolpoin","tas","sepatu",
-    "jam","kaca","gelas","piring","sendok","garpu","komputer","hp","televisi","radio",
-    "kipas","kulkas","oven","ember","payung","kunci","dompet","topi","kacamata","cermin",
-    "bantal","selimut","kasur","lemari","sapu","sisir","gunting","palu","obeng","sekop",
-    "charger","earphone","kamera","printer","joystick","keyboard","mouse","flashdisk","remote","senter",
-    "termos","wajan","panci","talenan","blender","setrika","mesin cuci","AC","dispenser","kalkulator"
-  ],
-  "👨‍⚕️ Profesi": [
-    "dokter","guru","polisi","pilot","koki","petani","nelayan","arsitek","programmer","designer",
-    "pelukis","musisi","atlet","penyanyi","aktor","penulis","fotografer","astronot","insinyur","bidan",
-    "perawat","hakim","pengacara","tentara","pemadam kebakaran","sopir","kasir","pelayan","satpam","apoteker",
-    "psikolog","veteriner","peneliti","ilmuwan","chef","barista","barber","stylist","model","jurnalis",
-    "editor","sutradara","animator","arkeolog","diplomat","tukang listrik","tukang ledeng","mekanik","montir","pengemudi ojek"
-  ],
-  "🏝️ Tempat": [
-    "sekolah","rumah sakit","pasar","mall","pantai","gunung","hutan","kota","desa","bandara",
-    "pelabuhan","stasiun","masjid","gereja","candi","museum","perpustakaan","taman","kolam renang","bioskop",
-    "restoran","hotel","kantor","pabrik","kebun binatang","stadion","universitas","puskesmas","terminal","apotek",
-    "gua","air terjun","danau","sungai","padang pasir","savana","pulau","tebing","lembah","oasis",
-    "pasar malam","taman bermain","panti asuhan","penjara","istana","benteng","mercusuar","rumah pohon","villa","resort"
-  ],
-  "🚗 Transportasi": [
-    "mobil","motor","sepeda","bus","truk","kereta","pesawat","kapal","helikopter","perahu",
-    "becak","taksi","ambulans","pemadam","traktor","forklift","crane","bulldozer","ekskavator","skateboard",
-    "skuter","bajaj","bemo","angkot","monorail","cable car","gondola","kapal selam","roket","balon udara",
-    "jet ski","speedboat","kapal feri","kapal kargo","glider","sepeda listrik","motor listrik","ATV","sepeda gunung","gerobak"
-  ],
-  "⚽ Olahraga": [
-    "sepak bola","basket","voli","tenis","badminton","renang","lari","tinju","gulat","panahan",
-    "golf","bisbal","kriket","hoki","polo","rugby","skateboarding","surfing","diving","panjat tebing",
-    "bersepeda","triathlon","maraton","sprint","lompat jauh","lempar cakram","tolak peluru","senam","yoga","pilates",
-    "taekwondo","karate","judo","aikido","pencak silat","muay thai","boxing","wrestling","angkat besi","parkour",
-    "esports","bowling","biliar","tenis meja","bulu tangkis","futsal","hockey es","curling","bobsled","ski"
-  ],
-  "🌍 Alam & Cuaca": [
-    "matahari","bulan","bintang","awan","hujan","pelangi","petir","tornado","gunung berapi","gempa bumi",
-    "tsunami","banjir","salju","es","api","angin","kabut","embun","aurora","gerhana",
-    "pohon","rumput","bunga","akar","daun","batu","tanah","lumpur","pasir","kerikil",
-    "hutan hujan","terumbu karang","padang rumput","tundra","rawa","delta","ngarai","oasis","terasering","kawah",
-    "koral","alga","lumut","pakis","kaktus","bunga matahari","mawar","melati","anggrek","bambu"
-  ]
+  apiKey: "AIzaSyAA5zPOoPgLkm4tHLYSZzk-OgkILxoeKwU",
+  authDomain: "drawingpickgame.firebaseapp.com",
+  databaseURL: "https://drawingpickgame-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "drawingpickgame",
+  storageBucket: "drawingpickgame.firebasestorage.app",
+  messagingSenderId: "1002361006200",
+  appId: "1:1002361006200:web:e36aaf45bc0cfb6a32e58d"
 };
 
-const CATEGORIES = Object.keys(WORD_LISTS);
-const ROUND_DURATION  = 60;
-const MAX_ROUNDS      = 8;
-const CHAT_COOLDOWN   = 1200;
-const ROUND_END_DELAY = 5000;
+/* ============================================================ WORD LISTS */
+const WORDS = {
+  "🐾 Hewan":["kucing","anjing","gajah","harimau","singa","burung","ikan","kuda","sapi","kerbau","kelinci","monyet","beruang","rubah","pinguin","katak","ular","buaya","jerapah","zebra","kanguru","koala","lumba-lumba","paus","hiu","elang","beo","merpati","cacing","laba-laba","kura-kura","rusa","kambing","domba","babi","itik","ayam","angsa","merak","flamingo","cheetah","serigala","badak","tapir","landak","berang-berang","musang","trenggiling","axolotl","capung","belalang","semut","lebah","kupu-kupu","udang","kepiting","cumi-cumi","gurita","lobster","penyu","salamander"],
+  "🍜 Makanan":["nasi","mie","sate","bakso","rendang","tempe","tahu","pizza","burger","roti","kue","coklat","es krim","sushi","nasi goreng","ayam goreng","gulai","soto","opor","lontong","ketoprak","gado-gado","siomay","pecel","rujak","martabak","pempek","cendol","klepon","onde-onde","donat","croissant","ramen","takoyaki","dim sum","hot dog","kebab","taco","pasta","lasagna","mangga","pisang","apel","jeruk","durian","rambutan","nanas","pepaya","alpukat","strawberry","es teh","kopi","jus","bubble tea","wedang jahe","susu","yogurt","keju","sarden","kerupuk"],
+  "🪑 Benda":["kursi","meja","lampu","pintu","jendela","buku","pensil","bolpoin","tas","sepatu","jam","kaca","gelas","piring","sendok","garpu","komputer","hp","televisi","radio","kipas","kulkas","oven","ember","payung","kunci","dompet","topi","kacamata","cermin","bantal","selimut","kasur","lemari","sapu","sisir","gunting","palu","obeng","sekop","charger","earphone","kamera","printer","joystick","keyboard","mouse","flashdisk","remote","senter","termos","wajan","panci","blender","setrika","mesin cuci","AC","dispenser","kalkulator","stopwatch"],
+  "👨‍⚕️ Profesi":["dokter","guru","polisi","pilot","koki","petani","nelayan","arsitek","programmer","designer","pelukis","musisi","atlet","penyanyi","aktor","penulis","fotografer","astronot","insinyur","bidan","perawat","hakim","pengacara","tentara","pemadam kebakaran","sopir","kasir","pelayan","satpam","apoteker","psikolog","veteriner","peneliti","ilmuwan","chef","barista","barber","stylist","model","jurnalis","editor","sutradara","animator","arkeolog","diplomat","tukang listrik","tukang ledeng","mekanik","montir","pengemudi ojek"],
+  "🏝️ Tempat":["sekolah","rumah sakit","pasar","mall","pantai","gunung","hutan","kota","desa","bandara","pelabuhan","stasiun","masjid","gereja","candi","museum","perpustakaan","taman","kolam renang","bioskop","restoran","hotel","kantor","pabrik","kebun binatang","stadion","universitas","puskesmas","terminal","apotek","gua","air terjun","danau","sungai","padang pasir","savana","pulau","tebing","lembah","oasis","pasar malam","taman bermain","penjara","istana","benteng","mercusuar","rumah pohon","villa","resort","kuburan"],
+  "🚗 Transportasi":["mobil","motor","sepeda","bus","truk","kereta","pesawat","kapal","helikopter","perahu","becak","taksi","ambulans","pemadam","traktor","forklift","crane","bulldozer","ekskavator","skateboard","skuter","bajaj","bemo","angkot","monorail","cable car","gondola","kapal selam","roket","balon udara","jet ski","speedboat","kapal feri","kapal kargo","glider","sepeda listrik","motor listrik","ATV","sepeda gunung","gerobak"],
+  "⚽ Olahraga":["sepak bola","basket","voli","tenis","badminton","renang","lari","tinju","gulat","panahan","golf","bisbol","kriket","hoki","rugby","skateboarding","surfing","diving","panjat tebing","bersepeda","triathlon","maraton","sprint","lompat jauh","lempar cakram","senam","yoga","pilates","taekwondo","karate","judo","aikido","pencak silat","muay thai","boxing","wrestling","angkat besi","parkour","esports","bowling","biliar","tenis meja","futsal","ski","curling","bobsled"],
+  "🌍 Alam":["matahari","bulan","bintang","awan","hujan","pelangi","petir","tornado","gunung berapi","gempa bumi","tsunami","banjir","salju","es","api","angin","kabut","embun","aurora","gerhana","pohon","rumput","bunga","akar","daun","batu","tanah","lumpur","pasir","kerikil","hutan hujan","terumbu karang","padang rumput","tundra","rawa","delta","ngarai","oasis","terasering","kawah","koral","alga","lumut","pakis","kaktus","mawar","melati","anggrek","bambu","dandelion"]
+};
+const CATS = Object.keys(WORDS);
+const PICK_DURATION  = 15; // seconds drawer has to pick a word
+const ROUND_DURATION = 60;
+const MAX_ROUNDS     = 8;
+const CHAT_CD        = 1200;
+const ROUND_END_WAIT = 5000;
 
 /* ============================================================ HELPERS */
-const genId       = () => Math.floor(1000 + Math.random() * 9000).toString();
-const genPid      = () => 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-const pickRandom  = arr => arr[Math.floor(Math.random() * arr.length)];
-const escHtml     = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const initials    = n => (n||'?').slice(0,2).toUpperCase();
-function avatarColor(name) {
-  const pal = ['#f94144','#f8961e','#6c63ff','#4cc9f0','#43e97b','#ff6584','#ffd166','#a855f7'];
-  let h = 0; for (const c of name) h = (h*31 + c.charCodeAt(0)) & 0xffff;
-  return pal[h % pal.length];
+const rnd      = () => Math.floor(1000 + Math.random() * 9000).toString();
+const pid_gen  = () => 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const pick     = a  => a[Math.floor(Math.random() * a.length)];
+const esc      = s  => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const ini      = n  => (n||'?').slice(0,2).toUpperCase();
+const sampleN  = (a,n) => { const c=[...a].sort(()=>Math.random()-.5); return c.slice(0,Math.min(n,c.length)); };
+function acolor(name){
+  const p=['#f94144','#f8961e','#6c63ff','#4cc9f0','#43e97b','#ff6584','#ffd166','#a855f7'];
+  let h=0; for(const c of (name||'')) h=(h*31+c.charCodeAt(0))&0xffff; return p[h%p.length];
 }
 
 /* ============================================================ STATE */
 let db;
-let roomId=null, playerId=null, playerName=null;
+let roomId=null,myId=null,myName=null;
 let isHost=false, isDrawer=false;
-let gameState={}, playersState={};
-let currentWord='', currentCategory='';
+let GS={}, PS={};                 // game state & players state
+let curWord='', curCat='';
 
 // Canvas
-let ctx, canvas, painting=false;
-let curColor='#ffffff', brushSize=4, isEraser=false;
-let strokesRef=null;
-let prevRoundId=null;
+let cvs,ctx2,painting=false;
+let curColor='#ffffff', brushSz=4, erasing=false;
+let strokesRef=null, prevRoundId=null;
 
 // Chat
 let lastChat=0;
 
-// Timer
-let timerInterval=null;
+// Timers
+let timerInt=null, pickInt=null, cdInt=null;
 
-// Theme picker
-let selTheme='__random__';
-let pickerCtx='start';
-let pendingSnap=null;
+// Mode modal state
+let selMode='random', selCat=CATS[0];
 
 // Listeners
-const listeners=[];
-const addListener=(ref,ev,fn)=>{ ref.on(ev,fn); listeners.push({ref,ev,fn}); };
-const clearListeners=()=>{ listeners.forEach(({ref,ev,fn})=>ref.off(ev,fn)); listeners.length=0; };
+const LS=[];
+const on =(ref,ev,fn)=>{ ref.on(ev,fn); LS.push({ref,ev,fn}); };
+const offAll=()=>{ LS.forEach(({ref,ev,fn})=>ref.off(ev,fn)); LS.length=0; };
 
-/* ============================================================ FIREBASE INIT */
-function initFirebase() {
-  try { firebase.initializeApp(firebaseConfig); db=firebase.database(); }
-  catch(e) { console.error(e); }
-  showScreen('lobby-screen');
+/* ============================================================ FIREBASE */
+function boot(){
+  try{ firebase.initializeApp(firebaseConfig); db=firebase.database(); }
+  catch(e){ console.error(e); }
+  show('lobby-screen');
 }
 
-/* ============================================================ UI UTILS */
-function showScreen(id) { document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
-function showError(m)  { document.getElementById('lobby-error').textContent=m; }
-function showToast(m)  { const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2400); }
+/* ============================================================ UI */
+const show = id => { document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById(id).classList.add('active'); };
+const err  = m  => { document.getElementById('lobby-err').textContent=m; };
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 
-/* ============================================================ LOBBY */
-document.getElementById('btn-create').addEventListener('click', ()=>{
-  const n=document.getElementById('player-name').value.trim();
-  if(!n) return showError('Masukkan nama kamu dulu!');
-  playerName=n; playerId=genPid(); createRoom();
+/* ============================================================ LOBBY EVENTS */
+document.getElementById('btn-create').addEventListener('click',()=>{
+  const n=document.getElementById('inp-name').value.trim();
+  if(!n) return err('Masukkan nama kamu dulu!');
+  myName=n; myId=pid_gen(); createRoom();
 });
-document.getElementById('btn-join').addEventListener('click', ()=>{
-  const n=document.getElementById('player-name').value.trim();
-  const c=document.getElementById('room-code-input').value.trim();
-  if(!n) return showError('Masukkan nama kamu dulu!');
-  if(!/^\d{4}$/.test(c)) return showError('Kode room harus 4 angka!');
-  playerName=n; playerId=genPid(); joinRoom(c);
+document.getElementById('btn-join').addEventListener('click',()=>{
+  const n=document.getElementById('inp-name').value.trim();
+  const c=document.getElementById('inp-code').value.trim();
+  if(!n) return err('Masukkan nama kamu dulu!');
+  if(!/^\d{4}$/.test(c)) return err('Kode room harus 4 angka!');
+  myName=n; myId=pid_gen(); joinRoom(c);
 });
-document.getElementById('player-name').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('btn-create').click(); });
-document.getElementById('room-code-input').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('btn-join').click(); });
-document.getElementById('room-code-input').addEventListener('input', function(){ this.value=this.value.replace(/\D/g,'').slice(0,4); });
+document.getElementById('inp-name').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('btn-create').click(); });
+document.getElementById('inp-code').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('btn-join').click(); });
+document.getElementById('inp-code').addEventListener('input',function(){ this.value=this.value.replace(/\D/g,'').slice(0,4); });
 
-/* ============================================================ ROOM CREATE / JOIN */
-async function createRoom() {
-  if(!db) return showError('Firebase tidak terhubung!');
-  roomId=genId(); isHost=true;
-  await db.ref(`rooms/${roomId}`).set({ host:playerId, status:'waiting', currentRound:0, maxRounds:MAX_ROUNDS, currentDrawer:null, currentWord:null, currentCategory:null, roundStartTime:null, correctGuessers:null, roundId:null });
-  await db.ref(`rooms/${roomId}/players/${playerId}`).set({ name:playerName, score:0, online:true });
-  db.ref(`rooms/${roomId}/players/${playerId}/online`).onDisconnect().set(false);
+/* ============================================================ CREATE / JOIN */
+async function createRoom(){
+  if(!db) return err('Firebase tidak terhubung!');
+  roomId=rnd(); isHost=true;
+  await db.ref(`rooms/${roomId}`).set({ host:myId, status:'waiting', gameMode:null, fixedCategory:null, currentRound:0, maxRounds:MAX_ROUNDS, currentDrawer:null, currentWord:null, wordChoices:null, currentCategory:null, roundStartTime:null, pickStartTime:null, correctGuessers:null, roundId:null });
+  await db.ref(`rooms/${roomId}/players/${myId}`).set({ name:myName, score:0, online:true });
+  db.ref(`rooms/${roomId}/players/${myId}/online`).onDisconnect().set(false);
   enterWaiting();
 }
-async function joinRoom(code) {
-  if(!db) return showError('Firebase tidak terhubung!');
-  const snap=await db.ref(`rooms/${code}`).once('value');
-  if(!snap.exists()) return showError('Room tidak ditemukan!');
-  if(snap.val().status!=='waiting') return showError('Game sudah berlangsung!');
+async function joinRoom(code){
+  if(!db) return err('Firebase tidak terhubung!');
+  const s=await db.ref(`rooms/${code}`).once('value');
+  if(!s.exists()) return err('Room tidak ditemukan!');
+  if(s.val().status!=='waiting') return err('Game sudah berlangsung!');
   roomId=code; isHost=false;
-  await db.ref(`rooms/${roomId}/players/${playerId}`).set({ name:playerName, score:0, online:true });
-  db.ref(`rooms/${roomId}/players/${playerId}/online`).onDisconnect().set(false);
+  await db.ref(`rooms/${roomId}/players/${myId}`).set({ name:myName, score:0, online:true });
+  db.ref(`rooms/${roomId}/players/${myId}/online`).onDisconnect().set(false);
   enterWaiting();
 }
 
-/* ============================================================ WAITING ROOM */
-function enterWaiting() {
-  document.getElementById('display-room-code').textContent=roomId;
-  showScreen('waiting-screen');
-  addListener(db.ref(`rooms/${roomId}/players`), 'value', snap=>{ playersState=snap.val()||{}; renderWaitingPlayers(); updateStartBtn(); });
-  addListener(db.ref(`rooms/${roomId}/status`), 'value', snap=>{ if(snap.val()==='drawing') enterGame(); });
-  addListener(db.ref(`rooms/${roomId}/host`), 'value', snap=>{ isHost=snap.val()===playerId; updateStartBtn(); });
+/* ============================================================ WAITING */
+function enterWaiting(){
+  document.getElementById('disp-code').textContent=roomId;
+  show('waiting-screen');
+  on(db.ref(`rooms/${roomId}/players`),'value',s=>{ PS=s.val()||{}; renderWaitPlayers(); updateStartBtn(); });
+  on(db.ref(`rooms/${roomId}/status`),'value',s=>{ if(s.val()==='picking'||s.val()==='drawing') enterGame(); });
+  on(db.ref(`rooms/${roomId}/host`),'value',s=>{ isHost=s.val()===myId; updateStartBtn(); });
 }
-
-function renderWaitingPlayers() {
-  const grid=document.getElementById('waiting-players'); grid.innerHTML='';
-  db.ref(`rooms/${roomId}/host`).once('value', snap=>{
-    const hostId=snap.val();
-    Object.entries(playersState).forEach(([pid,p])=>{
+function renderWaitPlayers(){
+  const g=document.getElementById('wait-players'); g.innerHTML='';
+  db.ref(`rooms/${roomId}/host`).once('value',s=>{
+    const hid=s.val();
+    Object.entries(PS).forEach(([pid,p])=>{
       if(!p||!p.online) return;
-      const col=avatarColor(p.name||'?');
-      const d=document.createElement('div'); d.className='player-card-mini';
-      d.innerHTML=`<div class="avatar" style="background:${col}20;color:${col};">${initials(p.name)}</div><div><div class="pname">${escHtml(p.name)}</div>${pid===hostId?'<div class="host-tag">Host</div>':''}</div>`;
-      grid.appendChild(d);
+      const col=acolor(p.name||'?');
+      const d=document.createElement('div'); d.className='pcard';
+      d.innerHTML=`<div class="avatar" style="background:${col}20;color:${col};">${ini(p.name)}</div><div><div class="pname">${esc(p.name)}</div>${pid===hid?'<div class="host-tag">Host</div>':''}</div>`;
+      g.appendChild(d);
     });
   });
 }
-
-function updateStartBtn() {
+function updateStartBtn(){
   const btn=document.getElementById('btn-start');
-  const n=Object.values(playersState).filter(p=>p&&p.online).length;
+  const n=Object.values(PS).filter(p=>p&&p.online).length;
   btn.disabled=!isHost||n<2;
-  document.getElementById('waiting-status').textContent=isHost
-    ?(n<2?`Butuh minimal 2 pemain (${n} terhubung)`:`${n} pemain siap — klik Mulai!`)
+  document.getElementById('wait-status').textContent=isHost
+    ?(n<2?`Butuh minimal 2 pemain (${n} terhubung)`:`${n} pemain siap — klik Atur & Mulai!`)
     :`${n} pemain terhubung… menunggu host`;
 }
+document.getElementById('btn-start').addEventListener('click',()=>{ if(!isHost) return; openModeModal(); });
+document.getElementById('copy-code').addEventListener('click',()=>{ navigator.clipboard?.writeText(roomId).catch(()=>{}); toast(`Kode "${roomId}" disalin! 📋`); });
 
-document.getElementById('btn-start').addEventListener('click', ()=>{ if(!isHost) return; pickerCtx='start'; openPicker(); });
-document.getElementById('copy-code-btn').addEventListener('click', ()=>{ navigator.clipboard?.writeText(roomId).catch(()=>{}); showToast(`Kode "${roomId}" disalin! 📋`); });
-
-/* ============================================================ THEME PICKER */
-function buildPicker() {
-  const grid=document.getElementById('theme-grid'); grid.innerHTML='';
-
-  const rand=document.createElement('div');
-  rand.className='random-btn'+(selTheme==='__random__'?' sel':'');
-  rand.innerHTML='🎲 Acak Otomatis';
-  rand.onclick=()=>sel('__random__');
-  grid.appendChild(rand);
-
-  CATEGORIES.forEach(cat=>{
-    const parts=cat.split(' ');
-    const emoji=parts[0]; const name=parts.slice(1).join(' ');
+/* ============================================================ MODE MODAL */
+function buildCatGrid(){
+  const g=document.getElementById('cat-grid'); g.innerHTML='';
+  CATS.forEach(cat=>{
+    const p=cat.split(' '); const em=p[0]; const nm=p.slice(1).join(' ');
     const d=document.createElement('div');
-    d.className='theme-btn'+(selTheme===cat?' sel':'');
-    d.innerHTML=`<span class="t-emoji">${emoji}</span><span class="t-name">${name}</span><span class="t-count">${WORD_LISTS[cat].length} kata</span>`;
-    d.onclick=()=>sel(cat);
-    grid.appendChild(d);
+    d.className='cat-btn'+(selCat===cat?' sel':'');
+    d.innerHTML=`<span class="ce">${em}</span><span class="cn">${nm}</span><span class="ck">${WORDS[cat].length} kata</span>`;
+    d.onclick=()=>{
+      selCat=cat;
+      document.querySelectorAll('.cat-btn').forEach(x=>x.classList.remove('sel'));
+      d.classList.add('sel');
+    };
+    g.appendChild(d);
   });
 }
 
-function sel(val) {
-  selTheme=val;
-  document.querySelectorAll('.random-btn,.theme-btn').forEach(el=>el.classList.remove('sel'));
-  if(val==='__random__') document.querySelector('.random-btn')?.classList.add('sel');
-  else document.querySelectorAll('.theme-btn').forEach(el=>{
-    const name=el.querySelector('.t-name')?.textContent;
-    if(val.includes(name)) el.classList.add('sel');
-  });
-}
+window.pickMode = function(m){
+  selMode=m;
+  document.querySelectorAll('.mode-card').forEach(c=>c.classList.remove('sel'));
+  document.querySelector(`.mode-card[data-mode="${m}"]`).classList.add('sel');
+  const catStep=document.getElementById('step-cat');
+  if(m==='fixed'){ catStep.style.display='block'; buildCatGrid(); }
+  else catStep.style.display='none';
+};
 
-function openPicker() { selTheme='__random__'; buildPicker(); document.getElementById('theme-modal').classList.remove('hidden'); }
-function closePicker() { document.getElementById('theme-modal').classList.add('hidden'); }
-document.getElementById('btn-cancel-theme').addEventListener('click', closePicker);
-document.getElementById('btn-confirm-theme').addEventListener('click', ()=>{
-  closePicker();
-  const cat=selTheme==='__random__'?pickRandom(CATEGORIES):selTheme;
-  const word=pickRandom(WORD_LISTS[cat]);
-  if(pickerCtx==='start') doStart(cat,word);
-  else doNext(pendingSnap,cat,word);
+function openModeModal(){ selMode='random'; pickMode('random'); document.getElementById('mode-modal').classList.remove('hidden'); }
+window.closeModeModal = function(){ document.getElementById('mode-modal').classList.add('hidden'); };
+
+document.getElementById('btn-confirm-mode').addEventListener('click',()=>{
+  closeModeModal();
+  const cat=selMode==='fixed'?selCat:null;
+  launchGame(selMode, cat);
 });
 
-/* ============================================================ GAME START / NEXT ROUND */
-async function doStart(cat,word) {
-  const players=Object.entries(playersState).filter(([,p])=>p&&p.online).map(([id])=>id);
-  await db.ref(`rooms/${roomId}`).update({ status:'drawing', currentRound:1, currentDrawer:players[0], currentWord:word, currentCategory:cat, roundStartTime:firebase.database.ServerValue.TIMESTAMP, correctGuessers:null, drawerOrder:players, drawerIndex:0, roundId:Date.now() });
-  await Promise.all([ db.ref(`rooms/${roomId}/strokes`).remove(), db.ref(`rooms/${roomId}/chat`).remove() ]);
+/* ============================================================ LAUNCH GAME */
+async function launchGame(mode, fixedCat){
+  const players=Object.entries(PS).filter(([,p])=>p&&p.online).map(([id])=>id);
+  const cat=mode==='fixed'?fixedCat:pick(CATS);
+  const choices=sampleN(WORDS[cat],3);
+  await db.ref(`rooms/${roomId}`).update({
+    status:'picking',
+    gameMode:mode, fixedCategory:fixedCat,
+    currentRound:1,
+    currentDrawer:players[0],
+    currentWord:null,
+    wordChoices:choices,
+    currentCategory:cat,
+    roundStartTime:null,
+    pickStartTime:firebase.database.ServerValue.TIMESTAMP,
+    correctGuessers:null,
+    drawerOrder:players, drawerIndex:0,
+    roundId:Date.now()
+  });
+  await Promise.all([db.ref(`rooms/${roomId}/strokes`).remove(), db.ref(`rooms/${roomId}/chat`).remove()]);
 }
 
-async function doNext(snap,cat,word) {
-  const order=snap.drawerOrder||Object.keys(playersState);
+async function nextRound(snap){
+  const order=snap.drawerOrder||Object.keys(PS);
   const ni=((snap.drawerIndex||0)+1)%order.length;
   const nr=(snap.currentRound||1)+1;
   if(nr>MAX_ROUNDS){ await db.ref(`rooms/${roomId}`).update({status:'gameover'}); return; }
-  await db.ref(`rooms/${roomId}`).update({ status:'drawing', currentRound:nr, currentDrawer:order[ni], currentWord:word, currentCategory:cat, roundStartTime:firebase.database.ServerValue.TIMESTAMP, correctGuessers:null, drawerIndex:ni, roundId:Date.now() });
-  await Promise.all([ db.ref(`rooms/${roomId}/strokes`).remove(), db.ref(`rooms/${roomId}/chat`).remove() ]);
+  const cat=snap.gameMode==='fixed'?snap.fixedCategory:pick(CATS);
+  const choices=sampleN(WORDS[cat],3);
+  await db.ref(`rooms/${roomId}`).update({
+    status:'picking',
+    currentRound:nr,
+    currentDrawer:order[ni],
+    currentWord:null,
+    wordChoices:choices,
+    currentCategory:cat,
+    roundStartTime:null,
+    pickStartTime:firebase.database.ServerValue.TIMESTAMP,
+    correctGuessers:null,
+    drawerIndex:ni,
+    roundId:Date.now()
+  });
+  await Promise.all([db.ref(`rooms/${roomId}/strokes`).remove(), db.ref(`rooms/${roomId}/chat`).remove()]);
 }
 
 /* ============================================================ ENTER GAME */
-function enterGame() {
-  clearListeners();
-  showScreen('game-screen');
+function enterGame(){
+  offAll();
+  show('game-screen');
   initCanvas();
-  // Listen room
-  addListener(db.ref(`rooms/${roomId}`),'value',snap=>{
-    const data=snap.val(); if(!data) return;
-    const newRoundId=data.roundId;
-    // ⭐ Clear canvas when round changes
-    if(newRoundId && newRoundId!==prevRoundId && prevRoundId!==null) {
-      clearCanvas();
+
+  on(db.ref(`rooms/${roomId}`),'value',s=>{
+    const data=s.val(); if(!data) return;
+    const newRid=data.roundId;
+    if(newRid && newRid!==prevRoundId && prevRoundId!==null) clearCanvas();
+    prevRoundId=newRid;
+    GS=data; PS=data.players||{};
+    isDrawer=data.currentDrawer===myId;
+    curWord=data.currentWord||''; curCat=data.currentCategory||'';
+
+    renderTopbar(data);
+    renderScores(data);
+
+    if(data.status==='picking'){
+      stopTimer(); stopPickTimer();
+      showPickingPhase(data);
+    } else if(data.status==='drawing'){
+      hideOverlay();
+      startTimer(data.roundStartTime);
+      renderDrawerBar(data);
+      renderHintBar(data);
+      setToolbarEnabled(isDrawer);
+    } else if(data.status==='round_end'){
+      stopTimer(); stopPickTimer();
+      showRoundEndPhase(data);
+    } else if(data.status==='gameover'){
+      stopTimer(); stopPickTimer();
+      showGameOverPhase(data);
     }
-    prevRoundId=newRoundId;
-    gameState=data; playersState=data.players||{};
-    isDrawer=data.currentDrawer===playerId;
-    currentWord=data.currentWord||''; currentCategory=data.currentCategory||'';
-    renderUI(data);
-    if(data.status==='drawing'){ document.getElementById('phase-overlay').classList.add('hidden'); startTimer(data.roundStartTime); }
-    else if(data.status==='round_end'){ stopTimer(); showRoundEnd(data); }
-    else if(data.status==='gameover'){ stopTimer(); showGameOver(data); }
   });
-  // Listen strokes
+
   strokesRef=db.ref(`rooms/${roomId}/strokes`);
-  addListener(strokesRef,'child_added',snap=>{ const s=snap.val(); if(s) drawStroke(s); });
-  // Listen chat
-  addListener(db.ref(`rooms/${roomId}/chat`),'child_added',snap=>{ const m=snap.val(); if(m) appendMsg(m); });
+  on(strokesRef,'child_added',s=>{ const d=s.val(); if(d) drawStroke(d); });
+  on(db.ref(`rooms/${roomId}/chat`),'child_added',s=>{ const m=s.val(); if(m) appendMsg(m); });
 }
 
-/* ============================================================ RENDER UI */
-function renderUI(data) {
-  document.getElementById('round-label').textContent=`Ronde ${data.currentRound||1}/${MAX_ROUNDS}`;
-  document.getElementById('category-label').textContent=data.currentCategory||'—';
-  const dn=(playersState[data.currentDrawer]||{}).name||'?';
-  document.getElementById('topbar-drawer-label').textContent=isDrawer?'🖌️ Kamu menggambar!':`🖌️ ${escHtml(dn)} menggambar`;
+/* ============================================================ PICKING PHASE */
+function showPickingPhase(data){
+  const ov=document.getElementById('overlay');
+  ov.classList.remove('hidden');
 
-  const wb=document.getElementById('drawer-word-bar');
-  if(isDrawer&&data.currentWord){ wb.style.display='block'; wb.textContent=`🤫 ${data.currentWord}`; }
-  else wb.style.display='none';
+  // Reset overlay elements
+  document.getElementById('ov-word').classList.add('hidden');
+  document.getElementById('ov-cd').textContent='';
+  document.getElementById('hint-bar').innerHTML='';
+  document.getElementById('drawer-bar').style.display='none';
 
-  if(!isDrawer&&data.currentWord&&data.status==='drawing') renderHint(data.currentWord,data.correctGuessers||{});
-  else document.getElementById('word-hint-bar').innerHTML='';
+  if(isDrawer){
+    document.getElementById('ov-title').textContent='✏️ Pilih kata kamu!';
+    document.getElementById('ov-sub').textContent=`Kategori: ${data.currentCategory} — kamu punya ${PICK_DURATION} detik`;
 
-  const tb=document.getElementById('draw-toolbar');
-  tb.style.opacity=isDrawer?'1':'0.35'; tb.style.pointerEvents=isDrawer?'auto':'none';
-  if(canvas) canvas.style.cursor=isDrawer?'crosshair':'default';
+    // Render 3 word choice cards
+    const wc=document.getElementById('word-choices');
+    wc.classList.remove('hidden'); wc.innerHTML='';
+    const choices=data.wordChoices||[];
+    choices.forEach(word=>{
+      const btn=document.createElement('div');
+      btn.className='wc';
+      btn.textContent=word;
+      btn.onclick=()=>{ if(GS.status==='picking' && isDrawer) chooseWord(word); };
+      wc.appendChild(btn);
+    });
 
-  renderScoreboard(data);
+    // Picking countdown
+    const pt=document.getElementById('pick-timer');
+    pt.classList.remove('hidden');
+    startPickTimer(data.pickStartTime, choices[0]);
+  } else {
+    document.getElementById('ov-title').textContent='🤔 Penggambar sedang memilih kata…';
+    document.getElementById('ov-sub').textContent=`Kategori: ${data.currentCategory}`;
+    document.getElementById('word-choices').classList.add('hidden');
+    document.getElementById('pick-timer').classList.add('hidden');
+    startPickTimer(data.pickStartTime, null); // just show countdown for guessers
+  }
+
+  setToolbarEnabled(false);
 }
 
-function renderHint(word,cg) {
-  const bar=document.getElementById('word-hint-bar'); bar.innerHTML='';
-  const did=cg[playerId];
-  for(let i=0;i<word.length;i++){
+function startPickTimer(startTime, autoWord){
+  stopPickTimer();
+  const pt=document.getElementById('pick-timer');
+  function tick(){
+    if(!startTime) return;
+    const rem=Math.max(0, PICK_DURATION - Math.floor((Date.now()-startTime)/1000));
+    if(isDrawer) pt.textContent=`⏳ ${rem} detik tersisa`;
+    if(rem<=0){
+      stopPickTimer();
+      // Auto-pick first word if drawer didn't pick
+      if(isDrawer && GS.status==='picking' && autoWord){
+        chooseWord(autoWord);
+      }
+    }
+  }
+  pickInt=setInterval(tick,500); tick();
+}
+function stopPickTimer(){ if(pickInt){clearInterval(pickInt);pickInt=null;} }
+
+async function chooseWord(word){
+  if(GS.status!=='picking' || !isDrawer) return;
+  await db.ref(`rooms/${roomId}`).update({
+    currentWord: word,
+    status: 'drawing',
+    roundStartTime: firebase.database.ServerValue.TIMESTAMP,
+    wordChoices: null
+  });
+}
+
+/* ============================================================ DRAWING PHASE UI */
+function renderDrawerBar(data){
+  const bar=document.getElementById('drawer-bar');
+  if(isDrawer && data.currentWord){ bar.style.display='block'; bar.textContent=`🤫 ${data.currentWord}`; }
+  else bar.style.display='none';
+}
+
+function renderHintBar(data){
+  const bar=document.getElementById('hint-bar'); bar.innerHTML='';
+  if(isDrawer||!data.currentWord||data.status!=='drawing') return;
+  const cg=data.correctGuessers||{};
+  const did=cg[myId];
+  for(let i=0;i<data.currentWord.length;i++){
     const s=document.createElement('span');
-    if(word[i]===' '){ s.className='hint-letter'; s.style.width='14px'; s.textContent=' '; }
-    else { s.className='hint-letter'+(did?' revealed':''); s.textContent=did?word[i]:'_'; }
+    if(data.currentWord[i]===' '){ s.className='hl'; s.style.minWidth='14px'; s.textContent=' '; }
+    else { s.className='hl'+(did?' rev':''); s.textContent=did?data.currentWord[i]:'_'; }
     bar.appendChild(s);
   }
 }
 
-function renderScoreboard(data) {
-  const list=document.getElementById('game-player-list'); list.innerHTML='';
-  Object.entries(playersState).filter(([,p])=>p).sort((a,b)=>(b[1].score||0)-(a[1].score||0)).forEach(([pid,p])=>{
-    const d=document.createElement('div'); d.className='player-row';
-    const col=avatarColor(p.name||'?');
-    d.innerHTML=`${pid===data.currentDrawer?'<div class="drawer-indicator"></div>':''}<div class="avatar" style="background:${col}20;color:${col};">${initials(p.name||'?')}</div><div class="pinfo"><div class="pname">${escHtml(p.name)}</div></div><div class="pscore">${p.score||0}</div>`;
+function setToolbarEnabled(en){
+  const tb=document.getElementById('toolbar');
+  tb.style.opacity=en?'1':'0.35'; tb.style.pointerEvents=en?'auto':'none';
+  if(cvs) cvs.style.cursor=en?'crosshair':'default';
+}
+
+function hideOverlay(){ document.getElementById('overlay').classList.add('hidden'); }
+
+/* ============================================================ ROUND END */
+let cdInt2=null;
+function showRoundEndPhase(data){
+  const ov=document.getElementById('overlay'); ov.classList.remove('hidden');
+  document.getElementById('ov-title').textContent='⏱️ Ronde Selesai!';
+  document.getElementById('ov-sub').textContent='Kata yang benar:';
+  document.getElementById('word-choices').classList.add('hidden');
+  document.getElementById('pick-timer').classList.add('hidden');
+  const ow=document.getElementById('ov-word'); ow.textContent=data.currentWord||''; ow.classList.remove('hidden');
+  setToolbarEnabled(false);
+
+  let sec=Math.ceil(ROUND_END_WAIT/1000);
+  const cd=document.getElementById('ov-cd');
+  cd.textContent=`Ronde berikutnya dalam ${sec}s…`;
+  if(cdInt2) clearInterval(cdInt2);
+  cdInt2=setInterval(()=>{ sec--; if(sec<=0){clearInterval(cdInt2);cd.textContent='';} else cd.textContent=`Ronde berikutnya dalam ${sec}s…`; },1000);
+
+  if(isHost) setTimeout(()=>{
+    db.ref(`rooms/${roomId}`).once('value',s=>{ const d=s.val(); if(d&&d.status==='round_end') nextRound(d); });
+  }, ROUND_END_WAIT);
+}
+
+/* ============================================================ GAME OVER */
+function showGameOverPhase(data){
+  if(cdInt2) clearInterval(cdInt2);
+  const ov=document.getElementById('overlay'); ov.classList.remove('hidden');
+  document.getElementById('ov-title').textContent='🏆 Game Selesai!';
+  document.getElementById('word-choices').classList.add('hidden');
+  document.getElementById('pick-timer').classList.add('hidden');
+  document.getElementById('ov-word').classList.add('hidden');
+  document.getElementById('ov-cd').textContent='';
+  const sorted=Object.entries(PS).filter(([,p])=>p).sort((a,b)=>(b[1].score||0)-(a[1].score||0));
+  const medals=['🥇','🥈','🥉'];
+  document.getElementById('ov-sub').innerHTML=
+    sorted.slice(0,5).map(([,p],i)=>`${medals[i]||'  '} <strong>${esc(p.name)}</strong>: ${p.score||0} poin`).join('<br>')
+    +(isHost?`<br><br><button class="btn btn-green" style="margin-top:10px;padding:10px 22px;" onclick="restartGame()">🔄 Main Lagi</button>`:'');
+  setToolbarEnabled(false);
+}
+
+window.restartGame=async function(){
+  const ups={}; Object.keys(PS).forEach(pid=>{ ups[`players/${pid}/score`]=0; });
+  await db.ref(`rooms/${roomId}`).update({status:'waiting',currentRound:0,gameMode:null,fixedCategory:null,...ups});
+  await Promise.all([db.ref(`rooms/${roomId}/strokes`).remove(),db.ref(`rooms/${roomId}/chat`).remove()]);
+  offAll(); prevRoundId=null; enterWaiting();
+};
+
+/* ============================================================ TOPBAR / SCOREBOARD */
+function renderTopbar(data){
+  document.getElementById('round-lbl').textContent=`Ronde ${data.currentRound||1}/${MAX_ROUNDS}`;
+  const catDisplay = data.currentCategory || '—';
+  const modeTag = data.gameMode==='fixed' ? ' 📌' : data.gameMode==='random' ? ' 🎲' : '';
+  document.getElementById('cat-lbl').textContent=catDisplay+modeTag;
+  const dn=(PS[data.currentDrawer]||{}).name||'?';
+  document.getElementById('drawer-lbl').textContent=isDrawer?'🖌️ Kamu menggambar!':`🖌️ ${esc(dn)} menggambar`;
+}
+
+function renderScores(data){
+  const list=document.getElementById('plist'); list.innerHTML='';
+  Object.entries(PS).filter(([,p])=>p).sort((a,b)=>(b[1].score||0)-(a[1].score||0)).forEach(([pid,p])=>{
+    const d=document.createElement('div'); d.className='prow';
+    const col=acolor(p.name||'?');
+    d.innerHTML=`${pid===data.currentDrawer?'<div class="draw-dot"></div>':''}<div class="avatar" style="background:${col}20;color:${col};width:24px;height:24px;font-size:.67rem;">${ini(p.name||'?')}</div><div class="pnm">${esc(p.name)}</div><div class="pts">${p.score||0}</div>`;
     list.appendChild(d);
   });
 }
 
-/* ============================================================ ROUND END / GAME OVER */
-let cdInterval=null;
-function showRoundEnd(data) {
-  const ov=document.getElementById('phase-overlay'); ov.classList.remove('hidden');
-  document.getElementById('phase-title').textContent='⏱️ Ronde Selesai!';
-  document.getElementById('phase-sub').textContent='Kata yang benar:';
-  const pw=document.getElementById('phase-word'); pw.textContent=data.currentWord||''; pw.style.display='block';
-  let sec=Math.ceil(ROUND_END_DELAY/1000);
-  const cd=document.getElementById('phase-countdown'); cd.textContent=`Ronde berikutnya dalam ${sec}s…`;
-  if(cdInterval) clearInterval(cdInterval);
-  cdInterval=setInterval(()=>{ sec--; if(sec<=0){clearInterval(cdInterval);cd.textContent='';} else cd.textContent=`Ronde berikutnya dalam ${sec}s…`; },1000);
-  if(isHost) setTimeout(()=>{
-    db.ref(`rooms/${roomId}`).once('value',snap=>{ const d=snap.val(); if(d&&d.status==='round_end'){ pendingSnap=d; pickerCtx='next'; openPicker(); }});
-  }, ROUND_END_DELAY);
-}
-
-function showGameOver(data) {
-  if(cdInterval) clearInterval(cdInterval);
-  const ov=document.getElementById('phase-overlay'); ov.classList.remove('hidden');
-  document.getElementById('phase-title').textContent='🏆 Game Selesai!';
-  document.getElementById('phase-word').style.display='none';
-  document.getElementById('phase-countdown').textContent='';
-  const sorted=Object.entries(playersState).filter(([,p])=>p).sort((a,b)=>(b[1].score||0)-(a[1].score||0));
-  const medals=['🥇','🥈','🥉'];
-  document.getElementById('phase-sub').innerHTML=
-    sorted.slice(0,5).map(([,p],i)=>`${medals[i]||'  '} <strong>${escHtml(p.name)}</strong>: ${p.score||0} poin`).join('<br>')
-    +(isHost?`<br><br><button class="btn btn-green" style="margin-top:10px;padding:10px 20px;" onclick="restartGame()">🔄 Main Lagi</button>`:'');
-}
-
-window.restartGame=async function() {
-  const ups={}; Object.keys(playersState).forEach(pid=>{ ups[`players/${pid}/score`]=0; });
-  await db.ref(`rooms/${roomId}`).update({status:'waiting',currentRound:0,...ups});
-  await Promise.all([db.ref(`rooms/${roomId}/strokes`).remove(),db.ref(`rooms/${roomId}/chat`).remove()]);
-  clearListeners(); prevRoundId=null; enterWaiting();
-};
-
 /* ============================================================ TIMER */
-function startTimer(t) {
+function startTimer(t){
   stopTimer();
-  const circ=document.getElementById('timer-circle'), num=document.getElementById('timer-number');
-  const D=120;
+  const ring=document.getElementById('timer-ring'), num=document.getElementById('timer-num');
+  const D=116;
   function tick(){
     if(!t) return;
     const rem=Math.max(0,ROUND_DURATION-Math.floor((Date.now()-t)/1000));
     num.textContent=rem;
     const pct=rem/ROUND_DURATION;
-    circ.style.strokeDashoffset=D-pct*D;
-    circ.style.stroke=pct>.4?'var(--accent)':pct>.2?'var(--gold)':'var(--accent2)';
-    if(rem<=0){ stopTimer(); if(isHost) db.ref(`rooms/${roomId}`).once('value',snap=>{ const d=snap.val(); if(d&&d.status==='drawing') db.ref(`rooms/${roomId}/status`).set('round_end'); }); }
+    ring.style.strokeDashoffset=D-pct*D;
+    ring.style.stroke=pct>.4?'var(--accent)':pct>.2?'var(--gold)':'var(--accent2)';
+    if(rem<=0){ stopTimer(); if(isHost) db.ref(`rooms/${roomId}`).once('value',s=>{ const d=s.val(); if(d&&d.status==='drawing') db.ref(`rooms/${roomId}/status`).set('round_end'); }); }
   }
-  timerInterval=setInterval(tick,500); tick();
+  timerInt=setInterval(tick,500); tick();
 }
-function stopTimer(){ if(timerInterval){clearInterval(timerInterval);timerInterval=null;} }
+function stopTimer(){ if(timerInt){clearInterval(timerInt);timerInt=null;} }
 
 /* ============================================================ CANVAS */
-function initCanvas() {
-  canvas=document.getElementById('game-canvas'); ctx=canvas.getContext('2d');
-  prevRoundId=null;
-  resizeCanvas();
-  window.addEventListener('resize',resizeCanvas);
+function initCanvas(){
+  cvs=document.getElementById('canvas'); ctx2=cvs.getContext('2d');
+  prevRoundId=null; resizeCvs(); window.addEventListener('resize',resizeCvs);
+  cvs.addEventListener('mousedown',e=>sd(e));
+  cvs.addEventListener('mousemove',e=>md(e));
+  cvs.addEventListener('mouseup',()=>ed());
+  cvs.addEventListener('mouseleave',()=>ed());
+  cvs.addEventListener('touchstart',e=>{e.preventDefault();sd(e.touches[0]);},{passive:false});
+  cvs.addEventListener('touchmove',e=>{e.preventDefault();md(e.touches[0]);},{passive:false});
+  cvs.addEventListener('touchend',()=>ed());
 
-  canvas.addEventListener('mousedown',e=>startDraw(e));
-  canvas.addEventListener('mousemove',e=>moveDraw(e));
-  canvas.addEventListener('mouseup',()=>endDraw());
-  canvas.addEventListener('mouseleave',()=>endDraw());
-  canvas.addEventListener('touchstart',e=>{e.preventDefault();startDraw(e.touches[0]);},{passive:false});
-  canvas.addEventListener('touchmove',e=>{e.preventDefault();moveDraw(e.touches[0]);},{passive:false});
-  canvas.addEventListener('touchend',()=>endDraw());
-
-  document.querySelectorAll('.color-swatch').forEach(sw=>{
+  document.querySelectorAll('.swatch').forEach(sw=>{
     sw.addEventListener('click',()=>{
-      document.querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('active'));
-      sw.classList.add('active'); curColor=sw.dataset.color; isEraser=false;
+      document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active'));
+      sw.classList.add('active'); curColor=sw.dataset.c; erasing=false;
       document.getElementById('eraser-btn').classList.remove('active');
     });
   });
-  document.getElementById('eraser-btn').addEventListener('click',()=>{ isEraser=!isEraser; document.getElementById('eraser-btn').classList.toggle('active',isEraser); });
-  document.getElementById('size-slider').addEventListener('input',e=>{ brushSize=parseInt(e.target.value); });
-  document.getElementById('clear-btn').addEventListener('click',()=>{ if(!isDrawer) return; clearCanvas(); db.ref(`rooms/${roomId}/strokes`).remove(); });
+  document.getElementById('eraser-btn').addEventListener('click',()=>{
+    erasing=!erasing; document.getElementById('eraser-btn').classList.toggle('active',erasing);
+  });
+  document.getElementById('sz').addEventListener('input',e=>{ brushSz=parseInt(e.target.value); });
+  document.getElementById('clear-btn').addEventListener('click',()=>{
+    if(!isDrawer) return; clearCanvas(); db.ref(`rooms/${roomId}/strokes`).remove();
+  });
 }
 
-function clearCanvas() {
-  if(!ctx||!canvas) return;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle='#1a1d26'; ctx.fillRect(0,0,canvas.width,canvas.height);
-  const wrap=document.getElementById('canvas-wrap');
-  wrap.classList.add('wiping'); setTimeout(()=>wrap.classList.remove('wiping'),400);
+function clearCanvas(){
+  if(!ctx2||!cvs) return;
+  ctx2.clearRect(0,0,cvs.width,cvs.height);
+  ctx2.fillStyle='#1a1d26'; ctx2.fillRect(0,0,cvs.width,cvs.height);
+  const w=document.getElementById('canvas-wrap');
+  w.classList.add('wipe'); setTimeout(()=>w.classList.remove('wipe'),400);
 }
 
-function resizeCanvas() {
-  if(!canvas) return;
+function resizeCvs(){
+  if(!cvs) return;
   const r=document.getElementById('canvas-wrap').getBoundingClientRect();
-  const img=ctx&&canvas.width>0?ctx.getImageData(0,0,canvas.width,canvas.height):null;
-  canvas.width=Math.floor(r.width); canvas.height=Math.floor(r.height);
-  ctx.fillStyle='#1a1d26'; ctx.fillRect(0,0,canvas.width,canvas.height);
-  if(img) ctx.putImageData(img,0,0);
+  const img=ctx2&&cvs.width>0?ctx2.getImageData(0,0,cvs.width,cvs.height):null;
+  cvs.width=Math.floor(r.width); cvs.height=Math.floor(r.height);
+  ctx2.fillStyle='#1a1d26'; ctx2.fillRect(0,0,cvs.width,cvs.height);
+  if(img) ctx2.putImageData(img,0,0);
 }
 
-function getPos(e) {
-  const r=canvas.getBoundingClientRect();
-  return { x:Math.max(0,Math.min(1,(e.clientX-r.left)/canvas.width)), y:Math.max(0,Math.min(1,(e.clientY-r.top)/canvas.height)) };
-}
+function gpos(e){ const r=cvs.getBoundingClientRect(); return{x:Math.max(0,Math.min(1,(e.clientX-r.left)/cvs.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/cvs.height))}; }
 
-function startDraw(e){ if(!isDrawer) return; painting=true; const p=getPos(e); sendStroke(p.x,p.y,'start'); }
-function moveDraw(e){ if(!isDrawer||!painting) return; const p=getPos(e); sendStroke(p.x,p.y,'move'); }
-function endDraw(){ if(!painting) return; painting=false; sendStroke(0,0,'end'); }
+function sd(e){ if(!isDrawer||GS.status!=='drawing') return; painting=true; const p=gpos(e); push(p.x,p.y,'start'); }
+function md(e){ if(!isDrawer||!painting||GS.status!=='drawing') return; const p=gpos(e); push(p.x,p.y,'move'); }
+function ed(){ if(!painting) return; painting=false; push(0,0,'end'); }
+function push(x,y,state){ if(!strokesRef) return; strokesRef.push({x,y,state,color:erasing?null:curColor,size:brushSz,eraser:erasing,ts:Date.now()}); }
 
-function sendStroke(x,y,state) {
-  if(!strokesRef) return;
-  strokesRef.push({ x,y,state,color:isEraser?null:curColor,size:brushSize,eraser:isEraser,ts:Date.now() });
-}
-
-function drawStroke(s) {
-  if(!ctx||!canvas) return;
-  const px=s.x*canvas.width, py=s.y*canvas.height;
-  const col=s.eraser?'#1a1d26':(s.color||'#ffffff');
-  if(s.state==='start'){
-    ctx.beginPath(); ctx.moveTo(px,py);
-    ctx.strokeStyle=col; ctx.lineWidth=s.size; ctx.lineCap='round'; ctx.lineJoin='round';
-  } else if(s.state==='move'){
-    ctx.strokeStyle=col; ctx.lineWidth=s.size; ctx.lineCap='round'; ctx.lineJoin='round';
-    ctx.lineTo(px,py); ctx.stroke(); ctx.beginPath(); ctx.moveTo(px,py);
-  }
+function drawStroke(s){
+  if(!ctx2||!cvs) return;
+  const px=s.x*cvs.width, py=s.y*cvs.height;
+  const col=s.eraser?'#1a1d26':(s.color||'#fff');
+  if(s.state==='start'){ ctx2.beginPath(); ctx2.moveTo(px,py); ctx2.strokeStyle=col; ctx2.lineWidth=s.size; ctx2.lineCap='round'; ctx2.lineJoin='round'; }
+  else if(s.state==='move'){ ctx2.strokeStyle=col; ctx2.lineWidth=s.size; ctx2.lineCap='round'; ctx2.lineJoin='round'; ctx2.lineTo(px,py); ctx2.stroke(); ctx2.beginPath(); ctx2.moveTo(px,py); }
 }
 
 /* ============================================================ CHAT */
-document.getElementById('btn-send-chat').addEventListener('click',sendChat);
-document.getElementById('chat-input').addEventListener('keydown',e=>{ if(e.key==='Enter') sendChat(); });
+document.getElementById('btn-send').addEventListener('click',sendChat);
+document.getElementById('chat-in').addEventListener('keydown',e=>{ if(e.key==='Enter') sendChat(); });
 
-async function sendChat() {
-  const inp=document.getElementById('chat-input');
+async function sendChat(){
+  const inp=document.getElementById('chat-in');
   const msg=inp.value.trim(); if(!msg) return;
   const now=Date.now();
-  if(now-lastChat<CHAT_COOLDOWN){ appendLocal('⏳ Tunggu sebentar dulu!'); return; }
+  if(now-lastChat<CHAT_CD){ sysMsg('⏳ Tunggu sebentar dulu!'); return; }
   lastChat=now; inp.value='';
-
-  if(gameState.status!=='drawing'){ appendLocal('⛔ Game tidak sedang berlangsung.'); return; }
-
+  if(GS.status!=='drawing'){ sysMsg('⛔ Tebakan hanya bisa dikirim saat game berlangsung.'); return; }
   if(isDrawer){
-    await db.ref(`rooms/${roomId}/chat`).push({ playerId,playerName,message:msg,timestamp:firebase.database.ServerValue.TIMESTAMP,isCorrect:false,isSystem:false });
+    await db.ref(`rooms/${roomId}/chat`).push({playerName:myName,message:msg,timestamp:firebase.database.ServerValue.TIMESTAMP,isCorrect:false,isSystem:false});
     return;
   }
-
-  if(gameState.correctGuessers&&gameState.correctGuessers[playerId]){ appendLocal('✅ Kamu sudah menebak!'); return; }
-
-  const correct=msg.toLowerCase().trim()===currentWord.toLowerCase().trim();
-  await db.ref(`rooms/${roomId}/chat`).push({ playerId,playerName,message:correct?`✅ ${playerName} menebak dengan benar!`:msg,timestamp:firebase.database.ServerValue.TIMESTAMP,isCorrect:correct,isSystem:correct });
-
+  if(GS.correctGuessers&&GS.correctGuessers[myId]){ sysMsg('✅ Kamu sudah menebak dengan benar!'); return; }
+  const correct=msg.toLowerCase().trim()===curWord.toLowerCase().trim();
+  await db.ref(`rooms/${roomId}/chat`).push({playerName:myName,message:correct?`✅ ${myName} menebak dengan benar!`:msg,timestamp:firebase.database.ServerValue.TIMESTAMP,isCorrect:correct,isSystem:correct});
   if(correct){
-    await db.ref(`rooms/${roomId}/correctGuessers/${playerId}`).set(true);
-    await db.ref(`rooms/${roomId}/players/${playerId}/score`).transaction(s=>(s||0)+10);
-    await db.ref(`rooms/${roomId}/players/${gameState.currentDrawer}/score`).transaction(s=>(s||0)+5);
+    await db.ref(`rooms/${roomId}/correctGuessers/${myId}`).set(true);
+    await db.ref(`rooms/${roomId}/players/${myId}/score`).transaction(s=>(s||0)+10);
+    await db.ref(`rooms/${roomId}/players/${GS.currentDrawer}/score`).transaction(s=>(s||0)+5);
     document.getElementById('canvas-wrap').classList.add('flash');
     setTimeout(()=>document.getElementById('canvas-wrap').classList.remove('flash'),700);
-    const nonDrawers=Object.entries(playersState).filter(([pid,p])=>p&&p.online&&pid!==gameState.currentDrawer);
-    const nc=Object.keys({...(gameState.correctGuessers||{}),[playerId]:true});
-    if(isHost&&nc.length>=nonDrawers.length) await db.ref(`rooms/${roomId}/status`).set('round_end');
+    const nd=Object.entries(PS).filter(([pid,p])=>p&&p.online&&pid!==GS.currentDrawer);
+    const nc=Object.keys({...(GS.correctGuessers||{}),[myId]:true});
+    if(isHost&&nc.length>=nd.length) await db.ref(`rooms/${roomId}/status`).set('round_end');
   }
 }
 
-function appendMsg(msg) {
-  const box=document.getElementById('chat-messages');
+function appendMsg(m){
+  const box=document.getElementById('chat-msgs');
   const d=document.createElement('div');
-  d.className='chat-msg'+(msg.isCorrect?' correct':'')+(msg.isSystem?' system':'');
-  if(msg.isSystem){ d.textContent=msg.message; }
-  else {
-    const sp=document.createElement('span'); sp.className='cn'; sp.style.color=avatarColor(msg.playerName||'?'); sp.textContent=(msg.playerName||'?')+':';
-    d.appendChild(sp); d.appendChild(document.createTextNode(' '+msg.message));
+  d.className='cmsg'+(m.isCorrect?' correct':'')+(m.isSystem?' sys':'');
+  if(m.isSystem){ d.textContent=m.message; }
+  else{
+    const sp=document.createElement('span'); sp.className='cn'; sp.style.color=acolor(m.playerName||'?'); sp.textContent=(m.playerName||'?')+':';
+    d.appendChild(sp); d.appendChild(document.createTextNode(' '+m.message));
   }
   box.appendChild(d); box.scrollTop=box.scrollHeight;
 }
-function appendLocal(txt){ const box=document.getElementById('chat-messages'); const d=document.createElement('div'); d.className='chat-msg system'; d.textContent=txt; box.appendChild(d); box.scrollTop=box.scrollHeight; }
+function sysMsg(txt){ const box=document.getElementById('chat-msgs'); const d=document.createElement('div'); d.className='cmsg sys'; d.textContent=txt; box.appendChild(d); box.scrollTop=box.scrollHeight; }
 
 /* ============================================================ BOOT */
-window.addEventListener('load', initFirebase);
+window.addEventListener('load', boot);
 </script>
 </body>
 </html>
