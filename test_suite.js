@@ -512,6 +512,43 @@ test('UI: Scores panel has mobile-hidden class by default in HTML', () => {
   assert(html.includes('<div class="scores mobile-hidden" id="scores-panel">'), 'Scores panel must have mobile-hidden class by default');
 });
 
+// 21. Audio: Mute enforcement and MasterGain
+test('Audio: Mute enforcement and MasterGain', () => {
+  ctx.soundMuted = true;
+  let oscCreated = false;
+  if (ctx.audioCtx) {
+    ctx.audioCtx.createOscillator = () => { oscCreated = true; return { connect: ()=>{}, start: ()=>{}, stop: ()=>{} }; };
+  }
+  ctx.playSound('round_start');
+  ctx.playSound('tick');
+  assert.strictEqual(ctx.soundMuted, true, 'soundMuted must be true');
+  assert.strictEqual(oscCreated, false, 'No oscillator should be created when muted');
+});
+
+// 22. Canvas: preventDefault called on mousedown and mousemove
+test('Canvas: preventDefault called on mousedown and mousemove', () => {
+  let preventedDown = false;
+  let preventedMove = false;
+  ctx.preventedTestDown = () => { preventedDown = true; };
+  ctx.preventedTestMove = () => { preventedMove = true; };
+  vm.runInContext(`
+    isDrawer = true;
+    painting = true;
+    GS = { status: 'drawing' };
+    sd({ preventDefault: preventedTestDown, clientX: 10, clientY: 10 });
+    md({ preventDefault: preventedTestMove, clientX: 20, clientY: 20 });
+    ed();
+  `, ctx);
+  assert(preventedDown, 'e.preventDefault must be called on mousedown');
+  assert(preventedMove, 'e.preventDefault must be called on mousemove');
+});
+
+// 23. CSS: user-select none and drag none applied to prevent OS sound
+test('CSS: user-select none and webkit-user-drag none present on canvas', () => {
+  assert(html.includes('-webkit-user-drag: none;'), 'Canvas must have -webkit-user-drag: none');
+  assert(html.includes('user-select: none;'), 'Body/canvas must have user-select: none');
+});
+
 console.log(`\nTEST RESULTS: ${passed}/${total} PASSED.`);
 if (passed === total) {
   process.exit(0);

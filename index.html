@@ -32,6 +32,7 @@
       width: 100%; height: 100%; height: 100dvh;
       overflow: hidden; position: fixed; inset: 0;
       font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text);
+      user-select: none; -webkit-user-select: none;
     }
 
     /* ── SCREENS ── */
@@ -242,8 +243,14 @@
       box-shadow: 0 4px 24px rgba(0,0,0,.6);
       border: 1px solid var(--border);
       display: flex; align-items: center; justify-content: center;
+      user-select: none; -webkit-user-select: none;
     }
-    #canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    #canvas {
+      display: block; width: 100%; height: 100%;
+      touch-action: none;
+      user-select: none; -webkit-user-select: none;
+      -webkit-user-drag: none;
+    }
 
     /* Drawer secret word */
     .drawer-bar {
@@ -671,12 +678,22 @@ const ROUND_END_WAIT = 5000;
 
 /* ============================================================ PROCEDURAL AUDIO */
 let audioCtx = null;
+let masterGain = null;
 let soundMuted = (typeof localStorage !== 'undefined' && localStorage.getItem('sketchcrew_muted') === '1');
 
 function initAudio() {
   if (!audioCtx) {
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
-    if (AudioCtor) audioCtx = new AudioCtor();
+    if (AudioCtor) {
+      audioCtx = new AudioCtor();
+      try {
+        masterGain = audioCtx.createGain();
+        masterGain.gain.setValueAtTime(soundMuted ? 0 : 1, audioCtx.currentTime);
+        masterGain.connect(audioCtx.destination);
+      } catch(e) {
+        console.warn('Master gain init error:', e);
+      }
+    }
   }
   if (audioCtx && audioCtx.state === 'suspended') {
     audioCtx.resume().catch(()=>{});
@@ -688,6 +705,7 @@ function playSound(type) {
   try {
     initAudio();
     if (!audioCtx) return;
+    const dest = masterGain || audioCtx.destination;
     const t = audioCtx.currentTime;
 
     if (type === 'click') {
@@ -698,7 +716,7 @@ function playSound(type) {
       osc.frequency.exponentialRampToValueAtTime(280, t + 0.04);
       gain.gain.setValueAtTime(0.12, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
-      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.connect(gain); gain.connect(dest);
       osc.start(t); osc.stop(t + 0.04);
     } else if (type === 'tick') {
       const osc = audioCtx.createOscillator();
@@ -707,7 +725,7 @@ function playSound(type) {
       osc.frequency.setValueAtTime(880, t);
       gain.gain.setValueAtTime(0.12, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
-      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.connect(gain); gain.connect(dest);
       osc.start(t); osc.stop(t + 0.05);
     } else if (type === 'correct') {
       // Arpeggio chime: C5, E5, G5, C6
@@ -720,7 +738,7 @@ function playSound(type) {
         gain.gain.setValueAtTime(0, t + i * 0.07);
         gain.gain.linearRampToValueAtTime(0.18, t + i * 0.07 + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.07 + 0.35);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(dest);
         osc.start(t + i * 0.07); osc.stop(t + i * 0.07 + 0.36);
       });
     } else if (type === 'close') {
@@ -732,7 +750,7 @@ function playSound(type) {
         osc.frequency.setValueAtTime(f, t + i * 0.08);
         gain.gain.setValueAtTime(0.14, t + i * 0.08);
         gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + 0.12);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(dest);
         osc.start(t + i * 0.08); osc.stop(t + i * 0.08 + 0.13);
       });
     } else if (type === 'round_start') {
@@ -744,7 +762,7 @@ function playSound(type) {
         osc.frequency.setValueAtTime(f, t + i * 0.1);
         gain.gain.setValueAtTime(0.14, t + i * 0.1);
         gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.1 + 0.22);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(dest);
         osc.start(t + i * 0.1); osc.stop(t + i * 0.1 + 0.23);
       });
     } else if (type === 'game_over') {
@@ -763,7 +781,7 @@ function playSound(type) {
         osc.frequency.setValueAtTime(n.f, t + off);
         gain.gain.setValueAtTime(0.2, t + off);
         gain.gain.exponentialRampToValueAtTime(0.001, t + off + n.d);
-        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(dest);
         osc.start(t + off); osc.stop(t + off + n.d);
         off += n.d * 0.85;
       });
@@ -775,7 +793,7 @@ function playSound(type) {
       osc.frequency.exponentialRampToValueAtTime(110, t + 0.15);
       gain.gain.setValueAtTime(0.12, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.connect(gain); gain.connect(dest);
       osc.start(t); osc.stop(t + 0.15);
     }
   } catch(e) {
@@ -794,13 +812,26 @@ function toggleSound() {
   if (typeof localStorage !== 'undefined') {
     localStorage.setItem('sketchcrew_muted', soundMuted ? '1' : '0');
   }
+  if (masterGain && audioCtx) {
+    try {
+      masterGain.gain.setValueAtTime(soundMuted ? 0 : 1, audioCtx.currentTime);
+    } catch(e){}
+  }
   updateSoundButtons();
   toast(soundMuted ? '🔇 Suara dimatikan' : '🔊 Suara diaktifkan');
   if (!soundMuted) playSound('click');
 }
 window.toggleSound = toggleSound;
 window.isSoundMuted = () => soundMuted;
-window.setSoundMuted = (v) => { soundMuted = v; updateSoundButtons(); };
+window.setSoundMuted = (v) => {
+  soundMuted = !!v;
+  if (masterGain && audioCtx) {
+    try {
+      masterGain.gain.setValueAtTime(soundMuted ? 0 : 1, audioCtx.currentTime);
+    } catch(e){}
+  }
+  updateSoundButtons();
+};
 
 // Pre-unlock Web Audio on first user interaction anywhere
 const unlockAudio = () => {
@@ -1483,6 +1514,9 @@ function enterGame(){
   show('game-screen');
   initCanvas();
 
+  let lastHandledStatus = null;
+  let activeRoundStartTime = null;
+
   on(db.ref(`rooms/${roomId}`),'value',s=>{
     const data=s.val(); if(!data) return;
     const newRid=data.roundId;
@@ -1507,22 +1541,40 @@ function enterGame(){
 
     if(data.status==='waiting'){
       // Game was restarted by host
+      lastHandledStatus = 'waiting';
+      activeRoundStartTime = null;
+      stopTimer();
       offAll(); prevRoundId=null; enterWaiting();
       return;
     } else if(data.status==='picking'){
+      activeRoundStartTime = null;
       stopTimer();
+      lastHandledStatus = 'picking';
       showPickingPhase(data);
     } else if(data.status==='drawing'){
       hideOverlay();
-      startTimer(data.roundStartTime);
       renderDrawerBar(data);
       renderHintBar(data);
       setToolbarEnabled(isDrawer);
+
+      if(lastHandledStatus !== 'drawing'){
+        lastHandledStatus = 'drawing';
+        playSound('round_start');
+      }
+
+      if(data.roundStartTime && (activeRoundStartTime !== data.roundStartTime || !timerInt)){
+        activeRoundStartTime = data.roundStartTime;
+        startTimer(data.roundStartTime);
+      }
     } else if(data.status==='round_end'){
+      activeRoundStartTime = null;
       stopTimer(); stopPickTimer();
+      lastHandledStatus = 'round_end';
       showRoundEndPhase(data);
     } else if(data.status==='gameover'){
+      activeRoundStartTime = null;
       stopTimer(); stopPickTimer();
+      lastHandledStatus = 'gameover';
       showGameOverPhase(data);
     }
   });
@@ -1931,8 +1983,6 @@ function startTimer(t){
   const wrap=document.querySelector('.timer-wrap');
   const D=116;
 
-  playSound('round_start');
-
   function tick(){
     if(!t) return;
     const rem=Math.max(0,ROUND_DURATION-Math.floor((Date.now()-t)/1000));
@@ -1987,10 +2037,11 @@ function initCanvas(){
   window.addEventListener('orientationchange', () => setTimeout(resizeCvs, 150));
   if(window.visualViewport) window.visualViewport.addEventListener('resize', resizeCvs);
 
-  cvs.addEventListener('mousedown', e=>sd(e));
-  cvs.addEventListener('mousemove', e=>md(e));
-  cvs.addEventListener('mouseup', ()=>ed());
+  cvs.addEventListener('mousedown', e=>{ e.preventDefault(); sd(e); });
+  cvs.addEventListener('mousemove', e=>{ if(painting) e.preventDefault(); md(e); });
+  cvs.addEventListener('mouseup', e=>{ e.preventDefault(); ed(); });
   cvs.addEventListener('mouseleave', ()=>ed());
+  cvs.addEventListener('dragstart', e=>e.preventDefault());
   window.addEventListener('mouseup', ()=>{ if(painting) ed(); });
 
   cvs.addEventListener('touchstart', e=>{ e.preventDefault(); sd(e.touches[0]); }, {passive:false});
@@ -2152,6 +2203,7 @@ function drawLocalSegment(x0, y0, x1, y1, col, sz){
 }
 
 function sd(e){
+  if(e && e.preventDefault) e.preventDefault();
   if(!isDrawer || GS.status!=='drawing') return;
   painting=true;
   const p=gpos(e);
@@ -2161,6 +2213,7 @@ function sd(e){
 }
 
 function md(e){
+  if(e && e.preventDefault && painting) e.preventDefault();
   if(!isDrawer || !painting || GS.status!=='drawing') return;
   const p=gpos(e);
   if(!currentStrokeBatch || currentStrokeBatch.length===0){
