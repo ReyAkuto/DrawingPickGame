@@ -279,6 +279,7 @@
       color: var(--text); border-radius: 3px; padding: 0 3px;
     }
     .hl.space { background: transparent; border-bottom: none; min-width: 12px; }
+    .hl.hyphen { background: transparent; border-bottom: none; min-width: 12px; }
     .hl.rev { background: rgba(67,233,123,.18); border-bottom-color: var(--green); color: var(--green); animation: hl-in .2s ease both; }
     @keyframes hl-in { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
     .hint-count {
@@ -673,6 +674,7 @@ const CATS = Object.keys(WORDS);
 const PICK_DURATION  = 15; // seconds drawer has to pick a word
 const ROUND_DURATION = 60;
 const MAX_ROUNDS     = 8;
+const MAX_ROOM_PLAYERS = 8;
 const CHAT_CD        = 1000;
 const ROUND_END_WAIT = 5000;
 
@@ -925,7 +927,7 @@ function cleanStr(s) {
   return (s || '')
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\w\s]/gi, ' ')
+    .replace(/[^\w\s]|_/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -1035,7 +1037,7 @@ function isSpoiler(msg, word) {
   return false;
 }
 
-const rnd      = () => Math.floor(1000 + Math.random() * 9000).toString();
+let rnd        = () => Math.floor(1000 + Math.random() * 9000).toString();
 const pid_gen  = () => 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const pick     = a  => a[Math.floor(Math.random() * a.length)];
 const esc      = s  => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -1072,6 +1074,30 @@ let lastTickSecond=-1;
 let currentRoundEndId=null;
 let lastClearedAt=0;
 let canvasInitialized=false;
+let inFlightGuessKey=null;
+let serverTimeOffset=0;
+let isTransitioningRound=false;
+let isChoosingWord=false;
+
+function getSyncedNow() {
+  return Date.now() + serverTimeOffset;
+}
+
+function saveSession() {
+  if (typeof sessionStorage !== 'undefined' && roomId && myId && myName) {
+    try {
+      sessionStorage.setItem('sketchcrew_session', JSON.stringify({ roomId, myId, myName }));
+    } catch(e) {}
+  }
+}
+
+function clearSession() {
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      sessionStorage.removeItem('sketchcrew_session');
+    } catch(e) {}
+  }
+}
 
 // Mode modal state
 let selMode='random', selCat=CATS[0];
@@ -1093,7 +1119,7 @@ const show = id => {
   document.getElementById(id).classList.add('active');
   if (id === 'game-screen') setTimeout(resizeCvs, 50);
 };
-const err = m => { document.getElementById('lobby-err').textContent=m; };
+let err = m => { document.getElementById('lobby-err').textContent=m; };
 function toast(m){
   const t=document.getElementById('toast');
   t.textContent=m; t.classList.add('show');
@@ -1139,21 +1165,30 @@ async function restartGame(){
   playSound('click');
   confetti.stop();
   currentRoundEndId=null;
+  inFlightGuessKey=null;
   strokeHistory=[]; currentStrokeBatch=[];
   clearCanvasBitmap();
-  const ups={}; Object.keys(PS).forEach(pid=>{ ups[`players/${pid}/score`]=0; });
-  await db.ref(`rooms/${roomId}`).update({
-    status:'waiting',
-    currentRound:0,
-    gameMode:null,
-    fixedCategory:null,
-    roundId:null,
-    currentWord:null,
-    currentDrawer:null,
-    canvasClearedAt:null,
-    ...ups
-  });
-  await Promise.all([db.ref(`rooms/${roomId}/strokes`).remove(), db.ref(`rooms/${roomId}/chat`).remove()]);
+  const chatBox=document.getElementById('chat-msgs');
+  if(chatBox) chatBox.innerHTML='';
+  try {
+    const ups={}; Object.keys(PS).forEach(pid=>{ ups[`players/${pid}/score`]=0; });
+    await db.ref(`rooms/${roomId}`).update({
+      status:'waiting',
+      currentRound:0,
+      gameMode:null,
+      fixedCategory:null,
+      roundId:null,
+      currentWord:null,
+      currentDrawer:null,
+      canvasClearedAt:null,
+      roundEndStartTime:null,
+      ...ups
+    });
+    await Promise.all([db.ref(`rooms/${roomId}/strokes`).remove(), db.ref(`rooms/${roomId}/chat`).remove()]);
+  } catch(e) {
+    console.error('Restart game error:', e);
+    toast('Gagal mengulang game: ' + (e.message || 'Koneksi bermasalah'));
+  }
 }
 window.restartGame = restartGame;
 
@@ -1179,12 +1214,80 @@ function boot(){
   try {
     firebase.initializeApp(firebaseConfig);
     db=firebase.database();
+
+    // Global .info/connected listener (outside offAll()) for automatic online reconnection
+    db.ref('.info/connected').on('value', snap => {
+      if(snap && snap.val() === true && roomId && myId){
+        const myOnlineRef = db.ref(`rooms/${roomId}/players/${myId}/online`);
+        myOnlineRef.onDisconnect().set(false);
+        myOnlineRef.set(true);
+      }
+    });
+
+    // Global .info/serverTimeOffset listener for clock skew synchronization
+    db.ref('.info/serverTimeOffset').on('value', snap => {
+      serverTimeOffset = (snap && snap.val()) || 0;
+    });
   } catch(e){
     console.error('Firebase boot error:', e);
   }
   updateSoundButtons();
   document.querySelectorAll('.sound-toggle-btn').forEach(b => b.addEventListener('click', toggleSound));
+
+  // Attempt session recovery on browser refresh
+  const saved = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('sketchcrew_session');
+  if(saved){
+    try {
+      const sess = JSON.parse(saved);
+      if(sess && sess.roomId && sess.myId && sess.myName){
+        attemptSessionRecovery(sess);
+        return;
+      }
+    } catch(e){
+      clearSession();
+    }
+  }
+
   show('lobby-screen');
+}
+
+async function attemptSessionRecovery(sess){
+  if(!db){ show('lobby-screen'); return; }
+  try {
+    const s = await db.ref(`rooms/${sess.roomId}`).once('value');
+    if(!s.exists() || s.val().status === 'gameover'){
+      clearSession();
+      show('lobby-screen');
+      return;
+    }
+    const rData = s.val();
+    if(!rData || !rData.players || !rData.players[sess.myId]){
+      clearSession();
+      show('lobby-screen');
+      return;
+    }
+    roomId = sess.roomId;
+    myId = sess.myId;
+    myName = sess.myName;
+    GS = rData;
+    PS = rData.players || {};
+    isHost = (rData.host === myId);
+
+    // Re-mark player online in room
+    await db.ref(`rooms/${roomId}/players/${myId}/online`).set(true);
+    db.ref(`rooms/${roomId}/players/${myId}/online`).onDisconnect().set(false);
+
+    toast(`Selamat datang kembali, ${myName}!`);
+    if(rData.status === 'waiting'){
+      enterWaiting();
+    } else {
+      enterGame();
+    }
+  } catch(e){
+    console.warn('Session recovery failed:', e);
+    clearSession();
+    show('lobby-screen');
+  }
 }
 
 /* ============================================================ LOBBY EVENTS */
@@ -1209,9 +1312,32 @@ document.getElementById('inp-code').addEventListener('input',function(){ this.va
 /* ============================================================ CREATE / JOIN */
 async function createRoom(){
   if(!db) return err('Firebase tidak terhubung!');
-  roomId=rnd(); isHost=true;
-  GS={ host: myId, status: 'waiting' };
   try {
+    let code = rnd();
+    let attempts = 0;
+    let found = false;
+    while(attempts < 10){
+      const s = await db.ref(`rooms/${code}`).once('value');
+      if(!s.exists()){
+        found = true;
+        break;
+      }
+      const val = s.val();
+      const hasOnlinePlayers = val && val.players && Object.values(val.players).some(p => p && p.online);
+      if(!hasOnlinePlayers || val.status === 'gameover'){
+        found = true;
+        break;
+      }
+      code = rnd();
+      attempts++;
+    }
+    if(!found){
+      return err('Gagal membuat room (server sibuk). Silakan coba lagi!');
+    }
+    roomId = code;
+    isHost = true;
+    GS = { host: myId, status: 'waiting' };
+    saveSession();
     await db.ref(`rooms/${roomId}`).set({
       host: myId,
       status: 'waiting',
@@ -1227,7 +1353,8 @@ async function createRoom(){
       pickStartTime: null,
       correctGuessers: null,
       roundId: null,
-      canvasClearedAt: null
+      canvasClearedAt: null,
+      roundEndStartTime: null
     });
     await db.ref(`rooms/${roomId}/players/${myId}`).set({ name:myName, score:0, online:true });
     db.ref(`rooms/${roomId}/players/${myId}/online`).onDisconnect().set(false);
@@ -1242,9 +1369,18 @@ async function joinRoom(code){
   try {
     const s=await db.ref(`rooms/${code}`).once('value');
     if(!s.exists()) return err('Room tidak ditemukan!');
-    if(s.val().status!=='waiting') return err('Game sudah berlangsung!');
+    const roomVal = s.val();
+    if(roomVal.status!=='waiting') return err('Game sudah berlangsung!');
+
+    const currentPlayers = roomVal.players || {};
+    const onlineCount = Object.values(currentPlayers).filter(p => p && p.online).length;
+    if(onlineCount >= MAX_ROOM_PLAYERS){
+      return err(`Room sudah penuh! (Maksimal ${MAX_ROOM_PLAYERS} pemain)`);
+    }
+
     roomId=code; isHost=false;
-    GS={ host: s.val().host, status: 'waiting' };
+    GS={ host: roomVal.host, status: 'waiting' };
+    saveSession();
     await db.ref(`rooms/${roomId}/players/${myId}`).set({ name:myName, score:0, online:true });
     db.ref(`rooms/${roomId}/players/${myId}/online`).onDisconnect().set(false);
     enterWaiting();
@@ -1290,7 +1426,7 @@ function renderWaitPlayers(){
     const d=document.createElement('div'); d.className='pcard';
     const isMe=(pid===myId);
     d.innerHTML=`
-      <div class="avatar" style="background:${col}25;color:${col};">${ini(p.name)}</div>
+      <div class="avatar" style="background:${col}25;color:${col};">${esc(ini(p.name))}</div>
       <div style="min-width:0;flex:1;">
         <div class="pname">${esc(p.name)}${isMe?'<span class="you-tag">Kamu</span>':''}</div>
         ${pid===hid?'<div class="host-tag">👑 Host</div>':''}
@@ -1342,14 +1478,18 @@ function checkHostMigration(){
         isHost = true;
         updateStartBtn();
         renderWaitPlayers();
-        db.ref(`rooms/${roomId}/host`).set(nextHost);
-        db.ref(`rooms/${roomId}/chat`).push({
-          playerName: 'Sistem',
-          message: `👑 ${myName} sekarang menjadi Host baru.`,
-          timestamp: firebase.database.ServerValue.TIMESTAMP,
-          isCorrect: false,
-          isSystem: true
-        });
+        try {
+          db.ref(`rooms/${roomId}/host`).set(nextHost);
+          db.ref(`rooms/${roomId}/chat`).push({
+            playerName: 'Sistem',
+            message: `👑 ${myName} sekarang menjadi Host baru.`,
+            timestamp: firebase.database.ServerValue.TIMESTAMP,
+            isCorrect: false,
+            isSystem: true
+          });
+        } catch(e){
+          console.warn('Host migration update error:', e);
+        }
         toast('👑 Kamu sekarang adalah Host!');
       }
     }
@@ -1360,34 +1500,42 @@ async function leaveRoom(){
   if(!roomId || !myId) return;
   const currentRoomId = roomId;
   const wasHost = isHost;
+  clearSession();
 
   try {
-    // If host is leaving, migrate to next online player first
-    if(wasHost && PS){
-      const nextPlayer = Object.entries(PS)
-        .filter(([pid, p]) => pid !== myId && p && p.online)
-        .map(([pid]) => pid)
-        .sort()[0];
-      if(nextPlayer){
-        await db.ref(`rooms/${currentRoomId}/host`).set(nextPlayer);
-        await db.ref(`rooms/${currentRoomId}/chat`).push({
-          playerName: 'Sistem',
-          message: `👑 ${PS[nextPlayer]?.name || 'Pemain'} sekarang menjadi Host baru.`,
-          timestamp: firebase.database.ServerValue.TIMESTAMP,
-          isCorrect: false,
-          isSystem: true
-        });
-      }
-    }
+    const remainingOnline = Object.entries(PS || {})
+      .filter(([pid, p]) => pid !== myId && p && p.online);
 
-    await db.ref(`rooms/${currentRoomId}/players/${myId}/online`).set(false);
-    await db.ref(`rooms/${currentRoomId}/chat`).push({
-      playerName: 'Sistem',
-      message: `👋 ${myName} telah meninggalkan room.`,
-      timestamp: firebase.database.ServerValue.TIMESTAMP,
-      isCorrect: false,
-      isSystem: true
-    });
+    if(remainingOnline.length === 0){
+      // Abandoned room cleanup: remove completely from Firebase
+      await db.ref(`rooms/${currentRoomId}`).remove();
+    } else {
+      // If host is leaving, migrate to next online player first
+      if(wasHost){
+        const nextPlayer = remainingOnline
+          .map(([pid]) => pid)
+          .sort()[0];
+        if(nextPlayer){
+          await db.ref(`rooms/${currentRoomId}/host`).set(nextPlayer);
+          await db.ref(`rooms/${currentRoomId}/chat`).push({
+            playerName: 'Sistem',
+            message: `👑 ${PS[nextPlayer]?.name || 'Pemain'} sekarang menjadi Host baru.`,
+            timestamp: firebase.database.ServerValue.TIMESTAMP,
+            isCorrect: false,
+            isSystem: true
+          });
+        }
+      }
+
+      await db.ref(`rooms/${currentRoomId}/players/${myId}/online`).set(false);
+      await db.ref(`rooms/${currentRoomId}/chat`).push({
+        playerName: 'Sistem',
+        message: `👋 ${myName} telah meninggalkan room.`,
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+        isCorrect: false,
+        isSystem: true
+      });
+    }
   } catch(e){
     console.warn('Error during leave room:', e);
   }
@@ -1404,6 +1552,7 @@ async function leaveRoom(){
 
   roomId = null; isHost = false; isDrawer = false;
   currentRoundEndId = null;
+  inFlightGuessKey = null;
   GS = {}; PS = {}; strokeHistory = []; currentStrokeBatch = [];
   clearCanvasBitmap();
   const chatBox = document.getElementById('chat-msgs');
@@ -1446,66 +1595,90 @@ document.getElementById('btn-confirm-mode').addEventListener('click',()=>{
 
 /* ============================================================ LAUNCH GAME */
 async function launchGame(mode, fixedCat){
-  const activePlayers=Object.entries(PS).filter(([,p])=>p&&p.online).map(([id])=>id);
-  if(activePlayers.length < 2) return toast('Butuh minimal 2 pemain!');
-  const cat=mode==='fixed'?fixedCat:pick(CATS);
-  const choices=sampleN(WORDS[cat],3);
-  await db.ref(`rooms/${roomId}`).update({
-    status:'picking',
-    gameMode:mode,
-    fixedCategory:fixedCat,
-    currentRound:1,
-    currentDrawer:activePlayers[0],
-    currentWord:null,
-    wordChoices:choices,
-    currentCategory:cat,
-    roundStartTime:null,
-    pickStartTime:firebase.database.ServerValue.TIMESTAMP,
-    correctGuessers:null,
-    canvasClearedAt:null,
-    drawerOrder:activePlayers,
-    drawerIndex:0,
-    roundId:Date.now()
-  });
-  await Promise.all([db.ref(`rooms/${roomId}/strokes`).remove(), db.ref(`rooms/${roomId}/chat`).remove()]);
+  try {
+    const activePlayers=Object.entries(PS).filter(([,p])=>p&&p.online).map(([id])=>id).sort();
+    if(activePlayers.length < 2) return toast('Butuh minimal 2 pemain!');
+    const cat=mode==='fixed'?fixedCat:pick(CATS);
+    const choices=sampleN(WORDS[cat],3);
+    inFlightGuessKey=null;
+    await db.ref(`rooms/${roomId}`).update({
+      status:'picking',
+      gameMode:mode,
+      fixedCategory:fixedCat,
+      currentRound:1,
+      currentDrawer:activePlayers[0],
+      currentWord:null,
+      wordChoices:choices,
+      currentCategory:cat,
+      roundStartTime:null,
+      pickStartTime:firebase.database.ServerValue.TIMESTAMP,
+      correctGuessers:null,
+      canvasClearedAt:null,
+      drawerOrder:activePlayers,
+      drawerIndex:0,
+      roundId:getSyncedNow(),
+      roundEndStartTime:null
+    });
+    await Promise.all([db.ref(`rooms/${roomId}/strokes`).remove(), db.ref(`rooms/${roomId}/chat`).remove()]);
+  } catch(e) {
+    console.error('Launch game error:', e);
+    toast('Gagal memulai game: ' + (e.message || 'Koneksi bermasalah'));
+  }
 }
 
 async function nextRound(snap){
-  const activePlayers=Object.entries(PS).filter(([,p])=>p&&p.online).map(([id])=>id);
-  if(activePlayers.length < 2){
-    await db.ref(`rooms/${roomId}`).update({status:'gameover'});
-    return;
+  if(isTransitioningRound) return;
+  isTransitioningRound = true;
+  try {
+    const activePlayers=Object.entries(PS).filter(([,p])=>p&&p.online).map(([id])=>id).sort();
+    if(activePlayers.length < 2){
+      await db.ref(`rooms/${roomId}`).update({status:'gameover'});
+      return;
+    }
+    const nr=(snap.currentRound||1)+1;
+    if(nr>MAX_ROUNDS){
+      await db.ref(`rooms/${roomId}`).update({status:'gameover'});
+      return;
+    }
+
+    // Pick next active online player deterministically
+    let curIdx=activePlayers.indexOf(snap.currentDrawer);
+    let nextIdx;
+    if(curIdx !== -1){
+      nextIdx = (curIdx + 1) % activePlayers.length;
+    } else {
+      const prevIdx = (typeof snap.drawerIndex === 'number') ? snap.drawerIndex : 0;
+      nextIdx = (prevIdx + 1) % activePlayers.length;
+    }
+    const nextDrawer=activePlayers[nextIdx];
+
+    const cat=snap.gameMode==='fixed'?snap.fixedCategory:pick(CATS);
+    const choices=sampleN(WORDS[cat],3);
+    inFlightGuessKey=null;
+
+    await db.ref(`rooms/${roomId}`).update({
+      status:'picking',
+      currentRound:nr,
+      currentDrawer:nextDrawer,
+      currentWord:null,
+      wordChoices:choices,
+      currentCategory:cat,
+      roundStartTime:null,
+      pickStartTime:firebase.database.ServerValue.TIMESTAMP,
+      correctGuessers:null,
+      canvasClearedAt:null,
+      drawerOrder:activePlayers,
+      drawerIndex:nextIdx,
+      roundId:getSyncedNow(),
+      roundEndStartTime:null
+    });
+    await Promise.all([db.ref(`rooms/${roomId}/strokes`).remove(), db.ref(`rooms/${roomId}/chat`).remove()]);
+  } catch(e) {
+    console.error('Next round error:', e);
+    toast('Gagal memuat ronde berikutnya: ' + (e.message || 'Koneksi bermasalah'));
+  } finally {
+    isTransitioningRound = false;
   }
-  const nr=(snap.currentRound||1)+1;
-  if(nr>MAX_ROUNDS){
-    await db.ref(`rooms/${roomId}`).update({status:'gameover'});
-    return;
-  }
-
-  // Pick next active online player
-  let curIdx=activePlayers.indexOf(snap.currentDrawer);
-  let nextIdx=(curIdx+1)%activePlayers.length;
-  const nextDrawer=activePlayers[nextIdx];
-
-  const cat=snap.gameMode==='fixed'?snap.fixedCategory:pick(CATS);
-  const choices=sampleN(WORDS[cat],3);
-
-  await db.ref(`rooms/${roomId}`).update({
-    status:'picking',
-    currentRound:nr,
-    currentDrawer:nextDrawer,
-    currentWord:null,
-    wordChoices:choices,
-    currentCategory:cat,
-    roundStartTime:null,
-    pickStartTime:firebase.database.ServerValue.TIMESTAMP,
-    correctGuessers:null,
-    canvasClearedAt:null,
-    drawerOrder:activePlayers,
-    drawerIndex:nextIdx,
-    roundId:Date.now()
-  });
-  await Promise.all([db.ref(`rooms/${roomId}/strokes`).remove(), db.ref(`rooms/${roomId}/chat`).remove()]);
 }
 
 /* ============================================================ ENTER GAME */
@@ -1543,6 +1716,9 @@ function enterGame(){
       // Game was restarted by host
       lastHandledStatus = 'waiting';
       activeRoundStartTime = null;
+      inFlightGuessKey = null;
+      const chatBox = document.getElementById('chat-msgs');
+      if(chatBox) chatBox.innerHTML = '';
       stopTimer();
       offAll(); prevRoundId=null; enterWaiting();
       return;
@@ -1620,26 +1796,48 @@ function updateHostWatchdogs(data){
     const drawerOnline = data.currentDrawer && PS[data.currentDrawer] && PS[data.currentDrawer].online;
     if(!drawerOnline){
       console.warn('Host watchdog: Drawer is offline during picking. Advancing...');
-      db.ref(`rooms/${roomId}/chat`).push({
-        playerName: 'Sistem',
-        message: '⚠️ Penggambar terputus saat memilih kata. Mengganti giliran...',
-        timestamp: firebase.database.ServerValue.TIMESTAMP,
-        isCorrect: false,
-        isSystem: true
-      });
+      try {
+        db.ref(`rooms/${roomId}/chat`).push({
+          playerName: 'Sistem',
+          message: '⚠️ Penggambar terputus saat memilih kata. Mengganti giliran...',
+          timestamp: firebase.database.ServerValue.TIMESTAMP,
+          isCorrect: false,
+          isSystem: true
+        });
+      } catch(e){}
       nextRound(data);
       return;
     }
 
-    // Schedule picking timeout watchdog (auto-pick first word)
+    // Check if drawer is alone during picking
+    const onlineCount = Object.values(PS).filter(p => p && p.online).length;
+    if(onlineCount < 2){
+      console.log('Host watchdog: Less than 2 players online during picking. Ending game...');
+      try {
+        db.ref(`rooms/${roomId}/chat`).push({
+          playerName: 'Sistem',
+          message: '⚠️ Pemain tidak mencukupi (kurang dari 2 pemain online). Game berakhir.',
+          timestamp: firebase.database.ServerValue.TIMESTAMP,
+          isCorrect: false,
+          isSystem: true
+        });
+        db.ref(`rooms/${roomId}`).update({ status: 'gameover' });
+      } catch(e){}
+      toast('Pemain lain telah keluar. Game berakhir!');
+      return;
+    }
+
+    // Schedule picking timeout watchdog (auto-pick fallback with +2s grace period)
     if(data.pickStartTime){
-      const elapsed = (Date.now() - data.pickStartTime) / 1000;
-      const remainingMs = Math.max(0, (PICK_DURATION + 1.5 - elapsed) * 1000);
-      hostWatchdogTimeout = setTimeout(()=>{
-        db.ref(`rooms/${roomId}`).once('value', s=>{
-          const cur=s.val();
-          if(cur && cur.status==='picking'){
-            console.log('Host watchdog: Pick timer expired. Auto-picking...');
+      const elapsed = (getSyncedNow() - data.pickStartTime) / 1000;
+      const remainingMs = Math.max(0, (PICK_DURATION + 2.0 - elapsed) * 1000);
+      hostWatchdogTimeout = setTimeout(async ()=>{
+        try {
+          const s = await db.ref(`rooms/${roomId}`).once('value');
+          const cur = (s && s.val) ? s.val() : null;
+          // Fallback auto-pick only if drawer did not choose a word in time
+          if(cur && cur.status==='picking' && !cur.currentWord){
+            console.log('Host watchdog: Pick timer expired. Auto-picking fallback...');
             const autoWord=(cur.wordChoices && cur.wordChoices[0]) || pick(WORDS[cur.currentCategory || pick(CATS)]);
             db.ref(`rooms/${roomId}/chat`).push({
               playerName: 'Sistem',
@@ -1655,7 +1853,9 @@ function updateHostWatchdogs(data){
               wordChoices: null
             });
           }
-        });
+        } catch(e) {
+          console.warn('Watchdog pick error:', e);
+        }
       }, remainingMs);
     }
   } else if(data.status==='drawing'){
@@ -1671,6 +1871,23 @@ function updateHostWatchdogs(data){
         isSystem: true
       });
       db.ref(`rooms/${roomId}/status`).set('round_end');
+      try { db.ref(`rooms/${roomId}/roundEndStartTime`).set(firebase.database.ServerValue.TIMESTAMP); } catch(e){}
+      return;
+    }
+
+    // Check if drawer is stuck drawing alone because all opponents left
+    const onlinePlayers = Object.values(PS).filter(p => p && p.online);
+    if(onlinePlayers.length < 2){
+      console.log('Host watchdog: Drawer is left alone. Ending game...');
+      db.ref(`rooms/${roomId}/chat`).push({
+        playerName: 'Sistem',
+        message: '⚠️ Semua lawan keluar! Game selesai.',
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+        isCorrect: false,
+        isSystem: true
+      });
+      db.ref(`rooms/${roomId}`).update({ status: 'gameover' });
+      toast('Semua pemain lain telah keluar. Game berakhir!');
       return;
     }
 
@@ -1681,28 +1898,55 @@ function updateHostWatchdogs(data){
     if(onlineGuessers.length > 0 && correctCount >= onlineGuessers.length){
       console.log('Host watchdog: All online guessers guessed correctly! Ending round early.');
       db.ref(`rooms/${roomId}/status`).set('round_end');
+      try { db.ref(`rooms/${roomId}/roundEndStartTime`).set(firebase.database.ServerValue.TIMESTAMP); } catch(e){}
       return;
     }
 
     // Schedule drawing duration expiration watchdog for host
     if(data.roundStartTime){
-      const elapsed = (Date.now() - data.roundStartTime) / 1000;
+      const elapsed = (getSyncedNow() - data.roundStartTime) / 1000;
       const remainingMs = Math.max(0, (ROUND_DURATION + 1 - elapsed) * 1000);
       if(remainingMs <= 0){
         console.log('Host watchdog: Drawing duration already expired. Ending round...');
         db.ref(`rooms/${roomId}/status`).set('round_end');
+        try { db.ref(`rooms/${roomId}/roundEndStartTime`).set(firebase.database.ServerValue.TIMESTAMP); } catch(e){}
         return;
       }
-      hostWatchdogTimeout = setTimeout(()=>{
-        db.ref(`rooms/${roomId}`).once('value', s=>{
-          const cur=s.val();
+      hostWatchdogTimeout = setTimeout(async ()=>{
+        try {
+          const s = await db.ref(`rooms/${roomId}`).once('value');
+          const cur = (s && s.val) ? s.val() : null;
           if(cur && cur.status==='drawing'){
             console.log('Host watchdog: Drawing timer expired. Ending round...');
             db.ref(`rooms/${roomId}/status`).set('round_end');
+            try { db.ref(`rooms/${roomId}/roundEndStartTime`).set(firebase.database.ServerValue.TIMESTAMP); } catch(e){}
           }
-        });
+        } catch(e) {
+          console.warn('Watchdog drawing error:', e);
+        }
       }, remainingMs);
     }
+  } else if(data.status==='round_end'){
+    // Host watchdog for round_end: ensures that if host migration occurs during round_end,
+    // the newly elected host seamlessly takes over and triggers nextRound when time expires.
+    if(!data.roundEndStartTime && db && roomId){
+      try { db.ref(`rooms/${roomId}/roundEndStartTime`).set(firebase.database.ServerValue.TIMESTAMP); } catch(e){}
+    }
+    const roundEndStart = data.roundEndStartTime || getSyncedNow();
+    const elapsed = Math.max(0, getSyncedNow() - roundEndStart);
+    const remainingMs = Math.max(0, ROUND_END_WAIT - elapsed);
+    hostWatchdogTimeout = setTimeout(async ()=>{
+      try {
+        const s = await db.ref(`rooms/${roomId}`).once('value');
+        const cur = (s && s.val) ? s.val() : null;
+        if(cur && cur.status==='round_end'){
+          console.log('Host watchdog: round_end timer expired, advancing to nextRound');
+          nextRound(cur);
+        }
+      } catch(e) {
+        console.warn('Watchdog round_end error:', e);
+      }
+    }, remainingMs);
   }
 }
 
@@ -1717,12 +1961,15 @@ function showPickingPhase(data){
   document.getElementById('drawer-bar').style.display='none';
 
   if(isDrawer){
+    isChoosingWord = false;
     document.getElementById('ov-title').textContent='✏️ Pilih kata kamu!';
     document.getElementById('ov-sub').textContent=`Kategori: ${data.currentCategory} — kamu punya ${PICK_DURATION} detik`;
 
     const wc=document.getElementById('word-choices');
     wc.classList.remove('hidden'); wc.innerHTML='';
-    const choices=data.wordChoices||[];
+    const choices = (data.wordChoices && data.wordChoices.length)
+      ? data.wordChoices
+      : sampleN(WORDS[data.currentCategory || pick(CATS)], 3);
     choices.forEach(word=>{
       const btn=document.createElement('div');
       btn.className='wc';
@@ -1738,6 +1985,7 @@ function showPickingPhase(data){
     pt.classList.remove('hidden');
     startPickTimer(data.pickStartTime, choices[0]);
   } else {
+    isChoosingWord = false;
     const drawerName=(PS[data.currentDrawer]||{}).name||'Penggambar';
     document.getElementById('ov-title').textContent=`🤔 ${drawerName} sedang memilih kata…`;
     document.getElementById('ov-sub').textContent=`Kategori: ${data.currentCategory}`;
@@ -1754,7 +2002,7 @@ function startPickTimer(startTime, autoWord){
   const pt=document.getElementById('pick-timer');
   function tick(){
     if(!startTime) return;
-    const rem=Math.max(0, PICK_DURATION - Math.floor((Date.now()-startTime)/1000));
+    const rem=Math.max(0, PICK_DURATION - Math.floor((getSyncedNow()-startTime)/1000));
     const dn=(PS[GS.currentDrawer]||{}).name||'penggambar';
     if(isDrawer) pt.textContent=`⏳ ${rem} detik tersisa untuk memilih`;
     else pt.textContent=`⏳ Menunggu ${dn} memilih kata (${rem}s)`;
@@ -1770,14 +2018,21 @@ function startPickTimer(startTime, autoWord){
 function stopPickTimer(){ if(pickInt){clearInterval(pickInt);pickInt=null;} }
 
 async function chooseWord(word){
-  if(GS.status!=='picking' || !isDrawer) return;
+  if(GS.status!=='picking' || !isDrawer || isChoosingWord) return;
+  isChoosingWord = true;
   playSound('click');
-  await db.ref(`rooms/${roomId}`).update({
-    currentWord: word,
-    status: 'drawing',
-    roundStartTime: firebase.database.ServerValue.TIMESTAMP,
-    wordChoices: null
-  });
+  try {
+    await db.ref(`rooms/${roomId}`).update({
+      currentWord: word,
+      status: 'drawing',
+      roundStartTime: firebase.database.ServerValue.TIMESTAMP,
+      wordChoices: null
+    });
+  } catch(e) {
+    console.error('Choose word error:', e);
+    isChoosingWord = false;
+    toast('Gagal memilih kata: ' + (e.message || 'Koneksi bermasalah'));
+  }
 }
 
 /* ============================================================ DRAWING PHASE UI */
@@ -1806,6 +2061,9 @@ function renderHintBar(data){
     if(word[i]===' '){
       s.className='hl space';
       s.textContent=' ';
+    } else if(word[i]==='-'){
+      s.className='hl hyphen';
+      s.textContent='-';
     } else {
       s.className='hl'+(did?' rev':'');
       s.textContent=did?word[i]:'_';
@@ -1817,9 +2075,17 @@ function renderHintBar(data){
   if(!did){
     const countBadge=document.createElement('span');
     countBadge.className='hint-count';
-    const words=word.split(' ');
-    if(words.length>1){
-      countBadge.textContent=`${words.map(w=>w.length).join(' + ')} huruf`;
+    const segments=word.split(' ');
+    if(segments.length > 1){
+      const segStrs=segments.map(seg => {
+        if(seg.includes('-')){
+          return seg.split('-').map(p=>p.length).join('-');
+        }
+        return seg.length;
+      });
+      countBadge.textContent=`${segStrs.join(' + ')} huruf`;
+    } else if(word.includes('-')){
+      countBadge.textContent=`${word.split('-').map(p=>p.length).join('-')} huruf`;
     } else {
       countBadge.textContent=`${word.length} huruf`;
     }
@@ -1832,7 +2098,7 @@ function setToolbarEnabled(en){
   if(!tb) return;
   tb.style.display=en?'flex':'none';
   tb.style.pointerEvents=en?'auto':'none';
-  if(cvs) cvs.style.cursor=en?'crosshair':'default';
+  if(cvs && cvs.style) cvs.style.cursor=en?'crosshair':'default';
   if(!en){
     painting=false;
     if(flushTimer){ clearTimeout(flushTimer); flushTimer=null; }
@@ -1859,25 +2125,46 @@ function showRoundEndPhase(data){
   // If this round end countdown is already ticking, do not re-trigger timers!
   if(isSameRoundEnd) return;
 
-  let sec=Math.ceil(ROUND_END_WAIT/1000);
+  const now = getSyncedNow();
+  const roundEndStart = data.roundEndStartTime || now;
+  const elapsed = Math.max(0, now - roundEndStart);
+  const remainingMs = Math.max(0, ROUND_END_WAIT - elapsed);
+  let sec = Math.max(1, Math.ceil(remainingMs / 1000));
+  const isFinalRound = (data.currentRound || 1) >= MAX_ROUNDS;
+
   const cd=document.getElementById('ov-cd');
-  cd.textContent=`Ronde berikutnya dalam ${sec}s…`;
+  cd.textContent = isFinalRound
+    ? `Menampilkan hasil akhir dalam ${sec}s…`
+    : `Ronde berikutnya dalam ${sec}s…`;
+
   if(cdInt2) clearInterval(cdInt2);
   cdInt2=setInterval(()=>{
     sec--;
-    if(sec<=0){ clearInterval(cdInt2); cd.textContent=''; }
-    else cd.textContent=`Ronde berikutnya dalam ${sec}s…`;
+    if(sec<=0){
+      clearInterval(cdInt2);
+      cd.textContent='';
+    } else {
+      cd.textContent = isFinalRound
+        ? `Menampilkan hasil akhir dalam ${sec}s…`
+        : `Ronde berikutnya dalam ${sec}s…`;
+    }
   }, 1000);
 
   if(hostWatchdogTimeout){ clearTimeout(hostWatchdogTimeout); hostWatchdogTimeout=null; }
   if(roundEndTimeout){ clearTimeout(roundEndTimeout); roundEndTimeout=null; }
   if(isHost){
-    roundEndTimeout=setTimeout(()=>{
-      db.ref(`rooms/${roomId}`).once('value',s=>{
-        const d=s.val();
+    if(!data.roundEndStartTime && db && roomId){
+      try { db.ref(`rooms/${roomId}/roundEndStartTime`).set(firebase.database.ServerValue.TIMESTAMP); } catch(e){}
+    }
+    roundEndTimeout=setTimeout(async ()=>{
+      try {
+        const s = await db.ref(`rooms/${roomId}`).once('value');
+        const d = (s && s.val) ? s.val() : null;
         if(d && d.status==='round_end') nextRound(d);
-      });
-    }, ROUND_END_WAIT);
+      } catch(e) {
+        console.warn('Round end timeout error:', e);
+      }
+    }, remainingMs);
   }
 }
 
@@ -1901,7 +2188,7 @@ function showGameOverPhase(data){
     podiumHtml += `
       <div class="podium-row ${isWinner?'winner':''}">
         <span class="podium-medal">${medals[i]||`#${i+1}`}</span>
-        <div class="avatar" style="background:${col}25;color:${col};width:28px;height:28px;font-size:.75rem;">${ini(p.name)}</div>
+        <div class="avatar" style="background:${col}25;color:${col};width:28px;height:28px;font-size:.75rem;">${esc(ini(p.name))}</div>
         <span class="podium-name">${esc(p.name)}</span>
         <span class="podium-pts">${p.score||0} pts</span>
       </div>`;
@@ -1960,7 +2247,7 @@ function renderScores(data){
     d.className='prow'+(isMe?' prow-me':'');
     d.innerHTML=`
       <span class="p-rank">#${rank+1}</span>
-      <div class="avatar" style="background:${col}25;color:${col};">${ini(p.name)}</div>
+      <div class="avatar" style="background:${col}25;color:${col};">${esc(ini(p.name))}</div>
       <div class="pnm-wrap">
         <span class="pnm">${esc(p.name)}${isMe?' (Kamu)':''}</span>
         <div class="p-badges">
@@ -1985,7 +2272,7 @@ function startTimer(t){
 
   function tick(){
     if(!t) return;
-    const rem=Math.max(0,ROUND_DURATION-Math.floor((Date.now()-t)/1000));
+    const rem=Math.max(0,ROUND_DURATION-Math.floor((getSyncedNow()-t)/1000));
     num.textContent=rem;
     const pct=rem/ROUND_DURATION;
     ring.style.strokeDashoffset=D-pct*D;
@@ -2006,10 +2293,19 @@ function startTimer(t){
       stopTimer();
       wrap.classList.remove('timer-urgent');
       if(isHost){
-        db.ref(`rooms/${roomId}`).once('value',s=>{
-          const d=s.val();
-          if(d && d.status==='drawing') db.ref(`rooms/${roomId}/status`).set('round_end');
-        });
+        try {
+          db.ref(`rooms/${roomId}`).once('value',s=>{
+            const d=s.val();
+            if(d && d.status==='drawing'){
+              try {
+                db.ref(`rooms/${roomId}/status`).set('round_end');
+                db.ref(`rooms/${roomId}/roundEndStartTime`).set(firebase.database.ServerValue.TIMESTAMP);
+              } catch(e){}
+            }
+          });
+        } catch(e){
+          console.warn('Timer round_end trigger error:', e);
+        }
       }
     }
   }
@@ -2040,12 +2336,19 @@ function initCanvas(){
   cvs.addEventListener('mousedown', e=>{ e.preventDefault(); sd(e); });
   cvs.addEventListener('mousemove', e=>{ if(painting) e.preventDefault(); md(e); });
   cvs.addEventListener('mouseup', e=>{ e.preventDefault(); ed(); });
-  cvs.addEventListener('mouseleave', ()=>ed());
   cvs.addEventListener('dragstart', e=>e.preventDefault());
   window.addEventListener('mouseup', ()=>{ if(painting) ed(); });
 
-  cvs.addEventListener('touchstart', e=>{ e.preventDefault(); sd(e.touches[0]); }, {passive:false});
-  cvs.addEventListener('touchmove',  e=>{ e.preventDefault(); md(e.touches[0]); }, {passive:false});
+  cvs.addEventListener('touchstart', e=>{
+    if(e.touches && e.touches.length > 1){ ed(); return; }
+    e.preventDefault();
+    sd(e.touches[0]);
+  }, {passive:false});
+  cvs.addEventListener('touchmove',  e=>{
+    if(e.touches && e.touches.length > 1){ ed(); return; }
+    e.preventDefault();
+    md(e.touches[0]);
+  }, {passive:false});
   cvs.addEventListener('touchend',   ()=>ed());
   cvs.addEventListener('touchcancel',()=>ed());
 
@@ -2068,13 +2371,19 @@ function initCanvas(){
 
   document.getElementById('sz').addEventListener('input',e=>{ brushSz=parseInt(e.target.value); });
 
-  document.getElementById('clear-btn').addEventListener('click',()=>{
+  document.getElementById('clear-btn').addEventListener('click', async ()=>{
     playSound('click');
     if(!isDrawer) return;
     strokeHistory=[];
     clearCanvasVisual();
-    db.ref(`rooms/${roomId}/strokes`).remove();
-    db.ref(`rooms/${roomId}/canvasClearedAt`).set(firebase.database.ServerValue.TIMESTAMP);
+    try {
+      await Promise.all([
+        db.ref(`rooms/${roomId}/strokes`).remove(),
+        db.ref(`rooms/${roomId}/canvasClearedAt`).set(firebase.database.ServerValue.TIMESTAMP)
+      ]);
+    } catch(e) {
+      console.warn('Clear canvas error:', e);
+    }
   });
 }
 
@@ -2117,8 +2426,13 @@ function resizeCvs(){
     container.style.height=targetH+'px';
   }
 
-  cvs.width=targetW;
-  cvs.height=targetH;
+  const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) ? Math.min(window.devicePixelRatio, 2) : 1;
+  cvs.width=Math.round(targetW * dpr);
+  cvs.height=Math.round(targetH * dpr);
+  if(cvs.style){
+    cvs.style.width=targetW+'px';
+    cvs.style.height=targetH+'px';
+  }
 
   // Replay strokes cleanly at the new scale from in-memory history
   redrawAllStrokes();
@@ -2180,7 +2494,7 @@ function flushBatch(isEnd=false){
 function drawLocalDot(x, y, col, sz){
   if(!ctx2||!cvs) return;
   const px=x*cvs.width, py=y*cvs.height;
-  const scaledSz=Math.max(1, sz * (cvs.width / 800));
+  const scaledSz=Math.max(1.5, sz * (cvs.width / 800));
   ctx2.fillStyle=col;
   ctx2.beginPath();
   ctx2.arc(px, py, scaledSz/2, 0, Math.PI*2);
@@ -2191,7 +2505,7 @@ function drawLocalSegment(x0, y0, x1, y1, col, sz){
   if(!ctx2||!cvs) return;
   const px0=x0*cvs.width, py0=y0*cvs.height;
   const px1=x1*cvs.width, py1=y1*cvs.height;
-  const scaledSz=Math.max(1, sz * (cvs.width / 800));
+  const scaledSz=Math.max(1.5, sz * (cvs.width / 800));
   ctx2.strokeStyle=col;
   ctx2.lineWidth=scaledSz;
   ctx2.lineCap='round';
@@ -2242,7 +2556,7 @@ function renderStrokeToContext(s, ctx, w, h){
   if(!ctx || !w || !h) return;
   const col=s.eraser ? '#1a1d26' : (s.color||'#ffffff');
   const scale=w/800; // Consistent stroke scaling based on 800px standard width
-  const sz=Math.max(1, (s.size||4) * scale);
+  const sz=Math.max(1.5, (s.size||4) * scale);
 
   ctx.strokeStyle=col;
   ctx.fillStyle=col;
@@ -2291,6 +2605,8 @@ async function sendChat(){
     return;
   }
 
+  const curRoundKey = `${roomId}_${GS.roundId || GS.currentRound}`;
+
   // 1. Spoiler Prevention for Drawer
   if(isDrawer){
     if(isSpoiler(msg, curWord)){
@@ -2299,17 +2615,21 @@ async function sendChat(){
       sysMsg('⚠️ Kamu adalah penggambar! Dilarang mengetik kata rahasia di chat.');
       return;
     }
-    await db.ref(`rooms/${roomId}/chat`).push({
-      playerName: myName,
-      message: msg,
-      timestamp: firebase.database.ServerValue.TIMESTAMP,
-      isCorrect: false,
-      isSystem: false
-    });
+    try {
+      await db.ref(`rooms/${roomId}/chat`).push({
+        playerName: myName,
+        message: msg,
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+        isCorrect: false,
+        isSystem: false
+      });
+    } catch(e) {
+      console.warn('Chat error:', e);
+    }
     return;
   }
 
-  // 2. Guesser check
+  // 2. Guesser check (already guessed)
   const hasAlreadyGuessed = !!(GS.correctGuessers && GS.correctGuessers[myId]);
 
   if(hasAlreadyGuessed){
@@ -2320,13 +2640,17 @@ async function sendChat(){
       sysMsg('⚠️ Kamu sudah menebak! Jangan membocorkan jawaban kepada pemain lain.');
       return;
     }
-    await db.ref(`rooms/${roomId}/chat`).push({
-      playerName: myName,
-      message: msg,
-      timestamp: firebase.database.ServerValue.TIMESTAMP,
-      isCorrect: false,
-      isSystem: false
-    });
+    try {
+      await db.ref(`rooms/${roomId}/chat`).push({
+        playerName: myName,
+        message: msg,
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+        isCorrect: false,
+        isSystem: false
+      });
+    } catch(e) {
+      console.warn('Chat error:', e);
+    }
     return;
   }
 
@@ -2334,17 +2658,30 @@ async function sendChat(){
   const correct = isMatch(msg, curWord);
 
   if(correct){
+    if(inFlightGuessKey === curRoundKey) return;
+    inFlightGuessKey = curRoundKey;
+    if(!GS.correctGuessers) GS.correctGuessers = {};
+    GS.correctGuessers[myId] = true;
     playSound('correct');
-    await db.ref(`rooms/${roomId}/chat`).push({
-      playerName: myName,
-      message: `✅ ${myName} menebak dengan benar!`,
-      timestamp: firebase.database.ServerValue.TIMESTAMP,
-      isCorrect: true,
-      isSystem: true
-    });
-    await db.ref(`rooms/${roomId}/correctGuessers/${myId}`).set(true);
-    await db.ref(`rooms/${roomId}/players/${myId}/score`).transaction(s=>(s||0)+10);
-    await db.ref(`rooms/${roomId}/players/${GS.currentDrawer}/score`).transaction(s=>(s||0)+5);
+    try {
+      await db.ref(`rooms/${roomId}/chat`).push({
+        playerName: myName,
+        message: `✅ ${myName} menebak dengan benar!`,
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+        isCorrect: true,
+        isSystem: true
+      });
+      await db.ref(`rooms/${roomId}/correctGuessers/${myId}`).set(true);
+      await db.ref(`rooms/${roomId}/players/${myId}/score`).transaction(s=>(s||0)+10);
+      if(GS.currentDrawer){
+        await db.ref(`rooms/${roomId}/players/${GS.currentDrawer}/score`).transaction(s=>(s||0)+5);
+      }
+    } catch(e) {
+      console.error('Score transaction error:', e);
+      inFlightGuessKey = null;
+      if(GS.correctGuessers) delete GS.correctGuessers[myId];
+      toast('Gagal mengirim tebakan: periksa koneksi');
+    }
 
     const container=document.getElementById('canvas-container');
     if(container){
@@ -2359,16 +2696,40 @@ async function sendChat(){
   if(close){
     playSound('close');
     sysMsg('🔥 Hampir benar! Periksa kembali ejaanmu.', 'close-alert');
+    try {
+      await db.ref(`rooms/${roomId}/chat`).push({
+        playerName: myName,
+        message: msg,
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+        isCorrect: false,
+        isSystem: false
+      });
+    } catch(e) {
+      console.warn('Chat error:', e);
+    }
+    return;
+  }
+
+  // 5. Spoiler Prevention for unguessed players (prevent leaking word in chat sentences)
+  if(isSpoiler(msg, curWord)){
+    playSound('wrong');
+    toast('⚠️ Pesanmu memuat kata rahasia!');
+    sysMsg('⚠️ Pesanmu memuat kata rahasia! Ketik langsung kata tebakanmu.');
+    return;
   }
 
   // Regular chat message
-  await db.ref(`rooms/${roomId}/chat`).push({
-    playerName: myName,
-    message: msg,
-    timestamp: firebase.database.ServerValue.TIMESTAMP,
-    isCorrect: false,
-    isSystem: false
-  });
+  try {
+    await db.ref(`rooms/${roomId}/chat`).push({
+      playerName: myName,
+      message: msg,
+      timestamp: firebase.database.ServerValue.TIMESTAMP,
+      isCorrect: false,
+      isSystem: false
+    });
+  } catch(e) {
+    console.warn('Chat error:', e);
+  }
 }
 
 function appendMsg(m){
